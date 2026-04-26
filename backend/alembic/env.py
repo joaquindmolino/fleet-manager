@@ -1,7 +1,6 @@
 """Configuración del entorno de Alembic para migraciones asíncronas."""
 
 import asyncio
-import os
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -12,13 +11,13 @@ from alembic import context
 
 # Importar Base y todos los modelos para que Alembic los detecte
 from app.core.database import Base
+from app.core.config import settings
 import app.models  # noqa: F401 — registra todos los modelos en Base.metadata
 
 config = context.config
 
-# Permite sobreescribir la URL desde variable de entorno (Docker, CI, etc.)
-if os.environ.get("DATABASE_URL"):
-    config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+# Usar siempre la URL ya procesada por pydantic (convierte postgres:// → postgresql+asyncpg://)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
