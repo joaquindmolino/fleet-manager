@@ -1,6 +1,6 @@
 """Configuración central de la aplicación mediante variables de entorno."""
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Variables individuales de PostgreSQL (Railway las provee aunque no haya DATABASE_URL)
+    PGHOST: str = ""
+    PGPORT: str = "5432"
+    PGUSER: str = ""
+    PGPASSWORD: str = ""
+    PGDATABASE: str = ""
+
     # Firebase
     FIREBASE_CREDENTIALS_PATH: str = ""
 
@@ -22,10 +29,21 @@ class Settings(BaseSettings):
     SENDGRID_API_KEY: str = ""
     EMAIL_FROM: str = "no-reply@fleetmanager.app"
 
+    @model_validator(mode="before")
+    @classmethod
+    def build_database_url(cls, values: dict) -> dict:
+        url = values.get("DATABASE_URL", "")
+        # Si no hay DATABASE_URL pero sí variables PG*, construir la URL
+        if (not url or "localhost" in url) and values.get("PGHOST"):
+            values["DATABASE_URL"] = (
+                f"postgresql+asyncpg://{values['PGUSER']}:{values['PGPASSWORD']}"
+                f"@{values['PGHOST']}:{values.get('PGPORT', '5432')}/{values['PGDATABASE']}"
+            )
+        return values
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def fix_database_url(cls, v: str) -> str:
-        # Railway puede proveer postgres:// o postgresql://, asyncpg necesita postgresql+asyncpg://
         if not isinstance(v, str):
             return v
         if v.startswith("postgres://"):
