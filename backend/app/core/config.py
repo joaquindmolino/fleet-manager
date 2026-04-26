@@ -25,9 +25,13 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def fix_database_url(cls, v: str) -> str:
-        # Railway provee postgresql://, asyncpg necesita postgresql+asyncpg://
-        if isinstance(v, str) and v.startswith("postgresql://"):
-            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # Railway puede proveer postgres:// o postgresql://, asyncpg necesita postgresql+asyncpg://
+        if not isinstance(v, str):
+            return v
+        if v.startswith("postgres://"):
+            return "postgresql+asyncpg://" + v[len("postgres://"):]
+        if v.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + v[len("postgresql://"):]
         return v
 
 
