@@ -9,9 +9,13 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker, require_superadmin
 from app.core.security import hash_password
-from app.models.user import User, Role
+from app.models.user import User, Role, UserPermission
 from app.schemas.common import PaginatedResponse
-from app.schemas.user import UserCreate, UserResponse, UserUpdate, UserPasswordChange, RoleResponse, UserPickerResponse
+from app.schemas.user import (
+    UserCreate, UserResponse, UserUpdate, UserPasswordChange,
+    RoleResponse, UserPickerResponse,
+    UserPermissionOverrideResponse, UserPermissionsUpdate,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -20,10 +24,11 @@ _can_crear = Depends(make_permission_checker("usuarios", "crear"))
 _can_editar = Depends(make_permission_checker("usuarios", "editar"))
 
 _LOAD_ROLE = selectinload(User.role).selectinload(Role.permissions)
+_LOAD_OVERRIDES = selectinload(User.permission_overrides).selectinload(UserPermission.permission)
 
 
 def _user_query(tenant_id: uuid.UUID):
-    return select(User).where(User.tenant_id == tenant_id).options(_LOAD_ROLE)
+    return select(User).where(User.tenant_id == tenant_id).options(_LOAD_ROLE, _LOAD_OVERRIDES)
 
 
 @router.get("/for-assignment", response_model=list[UserPickerResponse])
@@ -146,3 +151,51 @@ async def change_password(
     await db.flush()
     result2 = await db.execute(_user_query(current_user.tenant_id).where(User.id == user_id))
     return result2.scalar_one()
+
+
+@router.get("/{user_id}/permissions", response_model=list[UserPermissionOverrideResponse], dependencies=[_can_editar])
+async def get_user_permissions(user_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> list[UserPermission]:
+    """Retorna los overrides de permiso individuales del usuario."""
+    result = await db.execute(
+        select(UserPermission)
+        .where(UserPermission.user_id == user_id)
+        .options(selectinload(UserPermission.permission))
+    )
+    return list(result.scalars().all())
+
+
+@router.put("/{user_id}/permissions", response_model=list[UserPermissionOverrideResponse], dependencies=[_can_editar])
+async def set_user_permissions(
+    user_id: uuid.UUID, body: UserPermissionsUpdate, current_user: CurrentUser, db: DbSession
+) -> list[UserPermission]:
+    """Reemplaza todos los overrides de permiso del usuario. Enviar lista vacía para limpiar todos."""
+    # Verificar que el usuario pertenece al tenant
+    user_result = await db.execute(
+        select(User).where(User.id == user_id, User.tenant_id == current_user.tenant_id)
+    )
+    if user_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
+    # Eliminar todos los overrides actuales
+    existing = (await db.execute(
+        select(UserPermission).where(UserPermission.user_id == user_id)
+    )).scalars().all()
+    for ov in existing:
+        await db.delete(ov)
+    await db.flush()
+
+    # Crear los nuevos overrides
+    new_overrides: list[UserPermission] = []
+    for item in body.overrides:
+        ov = UserPermission(user_id=user_id, permission_id=item.permission_id, granted=item.granted)
+        db.add(ov)
+        new_overrides.append(ov)
+    await db.flush()
+
+    # Recargar con la relación permission
+    result = await db.execute(
+        select(UserPermission)
+        .where(UserPermission.user_id == user_id)
+        .options(selectinload(UserPermission.permission))
+    )
+    return list(result.scalars().all())

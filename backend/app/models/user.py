@@ -49,6 +49,32 @@ class Permission(Base):
     description: Mapped[str | None] = mapped_column(String(300))
 
     roles: Mapped[list["Role"]] = relationship(secondary=role_permissions, back_populates="permissions")
+    user_overrides: Mapped[list["UserPermission"]] = relationship(back_populates="permission")
+
+
+class UserPermission(Base):
+    """Override de permiso a nivel de usuario individual. Tiene precedencia sobre el rol."""
+
+    __tablename__ = "user_permissions"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    permission_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True
+    )
+    granted: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="permission_overrides")
+    permission: Mapped[Permission] = relationship(back_populates="user_overrides")
+
+    @property
+    def module(self) -> str:
+        return self.permission.module
+
+    @property
+    def action(self) -> str:
+        return self.permission.action
 
 
 class Role(Base, TimestampMixin):
@@ -90,5 +116,6 @@ class User(Base, TimestampMixin):
 
     tenant: Mapped["Tenant"] = relationship(back_populates="users")  # noqa: F821
     role: Mapped[Role | None] = relationship(back_populates="users")
+    permission_overrides: Mapped[list["UserPermission"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     notifications: Mapped[list["Notification"]] = relationship(back_populates="user")  # noqa: F821
     work_orders: Mapped[list["WorkOrder"]] = relationship(back_populates="assigned_to_user")  # noqa: F821

@@ -25,6 +25,16 @@ class RoleResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UserPermissionOverrideResponse(BaseModel):
+    """Pydantic mapea module/action desde los @property del modelo UserPermission."""
+    permission_id: uuid.UUID
+    module: str
+    action: str
+    granted: bool
+
+    model_config = {"from_attributes": True}
+
+
 class UserResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
@@ -35,6 +45,7 @@ class UserResponse(BaseModel):
     is_superadmin: bool
     created_at: datetime | None = None
     role: RoleResponse | None = None
+    permission_overrides: list[UserPermissionOverrideResponse] = []
 
     model_config = {"from_attributes": True}
 
@@ -55,6 +66,15 @@ class UserUpdate(BaseModel):
 
 class UserPasswordChange(BaseModel):
     password: str
+
+
+class UserPermissionOverrideSet(BaseModel):
+    permission_id: uuid.UUID
+    granted: bool
+
+
+class UserPermissionsUpdate(BaseModel):
+    overrides: list[UserPermissionOverrideSet]
 
 
 class UserPickerResponse(BaseModel):

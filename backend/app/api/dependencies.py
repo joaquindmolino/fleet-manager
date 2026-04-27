@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.user import User, Role
+from app.models.user import User, Role, UserPermission
 
 bearer_scheme = HTTPBearer()
 
@@ -36,7 +36,10 @@ async def get_current_user(
     result = await db.execute(
         select(User)
         .where(User.id == uuid.UUID(user_id))
-        .options(selectinload(User.role).selectinload(Role.permissions))
+        .options(
+            selectinload(User.role).selectinload(Role.permissions),
+            selectinload(User.permission_overrides).selectinload(UserPermission.permission),
+        )
     )
     user = result.scalar_one_or_none()
 
@@ -65,6 +68,18 @@ def make_permission_checker(module: str, action: str):
     async def check(current_user: CurrentUser) -> User:
         if current_user.is_superadmin:
             return current_user
+
+        # Overrides de usuario tienen precedencia sobre el rol
+        for ov in current_user.permission_overrides:
+            if ov.permission.module == module and ov.permission.action == action:
+                if not ov.granted:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Permiso requerido: {module}:{action}",
+                    )
+                return current_user  # override explícito de grant
+
+        # Sin override: chequear rol
         if current_user.role is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin rol asignado")
         has_permission = any(

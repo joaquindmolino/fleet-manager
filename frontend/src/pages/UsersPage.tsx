@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, ShieldAlert, UserCog, KeyRound, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Plus, ShieldAlert, UserCog, KeyRound, ToggleLeft, ToggleRight, Shield, Check, X, Minus } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
-import type { PaginatedResponse, User, Role } from '@/types'
+import type { PaginatedResponse, User, Role, UserPermissionOverride } from '@/types'
 
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
 const CS = CI + ' bg-white'
@@ -12,6 +12,174 @@ const CS = CI + ' bg-white'
 interface UF { full_name: string; email: string; password: string; role_id: string }
 const EMPTY: UF = { full_name: '', email: '', password: '', role_id: '' }
 interface PasswordForm { password: string; confirm: string }
+
+const MODULES = [
+  { key: 'flota', label: 'Flota' },
+  { key: 'mantenimiento', label: 'Mantenimiento' },
+  { key: 'viajes', label: 'Viajes' },
+  { key: 'proveedores', label: 'Proveedores' },
+  { key: 'gps', label: 'GPS' },
+  { key: 'reportes', label: 'Reportes' },
+  { key: 'usuarios', label: 'Usuarios' },
+  { key: 'configuracion', label: 'Configuración' },
+]
+const ACTIONS = [
+  { key: 'ver', label: 'Ver' },
+  { key: 'crear', label: 'Crear' },
+  { key: 'editar', label: 'Editar' },
+  { key: 'aprobar', label: 'Aprobar' },
+  { key: 'cerrar', label: 'Cerrar' },
+  { key: 'eliminar', label: 'Eliminar' },
+]
+
+type CellState = null | boolean  // null = heredado del rol
+
+interface PermMatrix { [moduleAction: string]: CellState }
+
+function buildMatrix(
+  rolePerms: { module: string; action: string }[],
+  overrides: UserPermissionOverride[]
+): PermMatrix {
+  const m: PermMatrix = {}
+  for (const mod of MODULES)
+    for (const act of ACTIONS)
+      m[`${mod.key}:${act.key}`] = null
+  for (const ov of overrides)
+    m[`${ov.module}:${ov.action}`] = ov.granted
+  return m
+}
+
+function roleHas(rolePerms: { module: string; action: string }[], mod: string, act: string) {
+  return rolePerms.some(p => p.module === mod && p.action === act)
+}
+
+interface PermEditorProps { targetUser: User; roles: Role[]; onClose: () => void }
+
+function PermissionEditor({ targetUser, onClose }: PermEditorProps) {
+  const qc = useQueryClient()
+  const rolePerms = targetUser.role?.permissions ?? []
+
+  const [matrix, setMatrix] = useState<PermMatrix>(() =>
+    buildMatrix(rolePerms, targetUser.permission_overrides ?? [])
+  )
+
+  const { data: allRoles } = useQuery({
+    queryKey: ['roles'],
+    queryFn: () => api.get<Role[]>('/users/roles').then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  const permIdMap: Record<string, string> = {}
+  for (const role of allRoles ?? [])
+    for (const p of role.permissions)
+      permIdMap[`${p.module}:${p.action}`] = p.id
+  for (const ov of targetUser.permission_overrides ?? [])
+    permIdMap[`${ov.module}:${ov.action}`] = ov.permission_id
+
+  const saveMutation = useMutation({
+    mutationFn: (overrides: { permission_id: string; granted: boolean }[]) =>
+      api.put(`/users/${targetUser.id}/permissions`, { overrides }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); onClose() },
+  })
+
+  function cycleCell(mod: string, act: string) {
+    const key = `${mod}:${act}`
+    const cur = matrix[key]
+    const next: CellState = cur === null ? true : cur === true ? false : null
+    setMatrix(prev => ({ ...prev, [key]: next }))
+  }
+
+  function clearRow(mod: string) {
+    setMatrix(prev => {
+      const next = { ...prev }
+      for (const act of ACTIONS) next[`${mod}:${act.key}`] = null
+      return next
+    })
+  }
+
+  function handleSave() {
+    const overrides: { permission_id: string; granted: boolean }[] = []
+    for (const [key, state] of Object.entries(matrix)) {
+      if (state === null) continue
+      const pid = permIdMap[key]
+      if (pid) overrides.push({ permission_id: pid, granted: state })
+    }
+    saveMutation.mutate(overrides)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 py-8 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl my-auto">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-900">Permisos de {targetUser.full_name}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Rol base: <span className="font-medium text-gray-600">{targetUser.role?.name ?? 'Sin rol'}</span></p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+
+        <div className="px-5 py-2.5 bg-gray-50 border-b border-gray-100 flex gap-5 text-xs text-gray-500">
+          <span className="flex items-center gap-1.5"><span className="w-4 h-4 rounded bg-green-100 border border-green-300 flex items-center justify-center"><Check size={9} className="text-green-600" /></span>Del rol</span>
+          <span className="flex items-center gap-1.5"><span className="w-4 h-4 rounded bg-green-500 flex items-center justify-center"><Check size={9} className="text-white" /></span>Concedido</span>
+          <span className="flex items-center gap-1.5"><span className="w-4 h-4 rounded bg-red-500 flex items-center justify-center"><X size={9} className="text-white" /></span>Denegado</span>
+          <span className="flex items-center gap-1.5"><span className="w-4 h-4 rounded border border-gray-200 flex items-center justify-center"><Minus size={9} className="text-gray-300" /></span>Sin acceso</span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50">
+                <th className="text-left px-4 py-2 text-gray-500 font-semibold w-36">Módulo</th>
+                {ACTIONS.map(a => <th key={a.key} className="px-2 py-2 text-center text-gray-500 font-semibold">{a.label}</th>)}
+                <th className="px-2 py-2 w-20" />
+              </tr>
+            </thead>
+            <tbody>
+              {MODULES.map(mod => (
+                <tr key={mod.key} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="px-4 py-2.5 font-medium text-gray-700">{mod.label}</td>
+                  {ACTIONS.map(act => {
+                    const key = `${mod.key}:${act.key}`
+                    const state = matrix[key]
+                    const fromRole = roleHas(rolePerms, mod.key, act.key)
+                    let cls = 'w-6 h-6 rounded cursor-pointer flex items-center justify-center mx-auto transition-colors '
+                    let icon = null
+                    if (state === true) { cls += 'bg-green-500 hover:bg-green-600'; icon = <Check size={11} className="text-white" /> }
+                    else if (state === false) { cls += 'bg-red-500 hover:bg-red-600'; icon = <X size={11} className="text-white" /> }
+                    else if (fromRole) { cls += 'bg-green-100 border border-green-300 hover:bg-green-200'; icon = <Check size={11} className="text-green-600" /> }
+                    else { cls += 'border border-gray-200 hover:border-gray-300 hover:bg-gray-100'; icon = <Minus size={11} className="text-gray-300" /> }
+                    return (
+                      <td key={act.key} className="px-2 py-2 text-center">
+                        <button type="button" className={cls} onClick={() => cycleCell(mod.key, act.key)}
+                          title={state !== null ? `Override: ${state ? 'Concedido' : 'Denegado'} — click para quitar` : `Del rol (${fromRole ? 'tiene acceso' : 'sin acceso'}) — click para personalizar`}>
+                          {icon}
+                        </button>
+                      </td>
+                    )
+                  })}
+                  <td className="px-2 py-2 text-center">
+                    <button type="button" onClick={() => clearRow(mod.key)} className="text-xs text-gray-400 hover:text-gray-600 underline">limpiar</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+          <p className="text-xs text-gray-400">Click en una celda para ciclar: heredado → concedido → denegado → heredado.</p>
+          <div className="flex gap-2 shrink-0">
+            <button type="button" onClick={onClose} className="text-sm border border-gray-200 rounded-lg px-4 py-2 hover:bg-gray-50">Cancelar</button>
+            <button type="button" onClick={handleSave} disabled={saveMutation.isPending}
+              className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2">
+              {saveMutation.isPending ? 'Guardando...' : 'Guardar permisos'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function UsersPage() {
   const { user: me, isLoading: authLoading } = useAuth()
@@ -24,6 +192,7 @@ export default function UsersPage() {
   const [passwordTarget, setPasswordTarget] = useState<User | null>(null)
   const [passwordForm, setPasswordForm] = useState<PasswordForm>({ password: '', confirm: '' })
   const [passwordError, setPasswordError] = useState('')
+  const [permTarget, setPermTarget] = useState<User | null>(null)
 
   const isSuperadmin = !authLoading && !!me?.is_superadmin
 
@@ -135,6 +304,7 @@ export default function UsersPage() {
                 : data?.items.map(u => {
                   const isMe = u.id === me.id
                   const role = u.role_id ? roleMap[u.role_id] : null
+                  const hasOverrides = (u.permission_overrides?.length ?? 0) > 0
                   return editingId === u.id ? (
                     <tr key={u.id} className={editRow}>
                       <form id={`e-${u.id}`} onSubmit={e => { e.preventDefault(); updateMutation.mutate({ id: u.id, body: { full_name: editForm.full_name, email: editForm.email, role_id: editForm.role_id || null } }) }} />
@@ -169,18 +339,32 @@ export default function UsersPage() {
                         </button>
                       </td>
                       <td className="px-3 py-3">
-                        {role
-                          ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{role.name}</span>
-                          : <span className="text-gray-300 text-xs">Sin rol</span>}
+                        <div className="flex items-center gap-1.5">
+                          {role
+                            ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{role.name}</span>
+                            : <span className="text-gray-300 text-xs">Sin rol</span>}
+                          {hasOverrides && (
+                            <span title={`${u.permission_overrides.length} permisos personalizados`} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-600 border border-amber-200">
+                              +{u.permission_overrides.length}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{u.is_active ? 'Activo' : 'Inactivo'}</span>
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-3">
+                          {!u.is_superadmin && (
+                            <button onClick={() => setPermTarget(u)} title="Personalizar permisos"
+                              className={`transition-colors ${hasOverrides ? 'text-amber-500 hover:text-amber-700' : 'text-gray-300 hover:text-gray-500'}`}>
+                              <Shield size={15} />
+                            </button>
+                          )}
                           <button onClick={() => startEdit(u)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button>
                           {!isMe && (
-                            <button onClick={() => toggleActive(u)} title={u.is_active ? 'Desactivar' : 'Activar'} className={`transition-colors ${u.is_active ? 'text-green-500 hover:text-red-500' : 'text-gray-300 hover:text-green-500'}`}>
+                            <button onClick={() => toggleActive(u)} title={u.is_active ? 'Desactivar' : 'Activar'}
+                              className={`transition-colors ${u.is_active ? 'text-green-500 hover:text-red-500' : 'text-gray-300 hover:text-green-500'}`}>
                               {u.is_active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
                             </button>
                           )}
@@ -225,14 +409,18 @@ export default function UsersPage() {
               </div>
               {passwordError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{passwordError}</p>}
               <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => setPasswordTarget(null)} className="flex-1 text-sm border border-gray-200 rounded-lg py-2 hover:bg-gray-50 transition-colors">Cancelar</button>
-                <button type="submit" disabled={passwordMutation.isPending} className="flex-1 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg py-2 transition-colors">
+                <button type="button" onClick={() => setPasswordTarget(null)} className="flex-1 text-sm border border-gray-200 rounded-lg py-2 hover:bg-gray-50">Cancelar</button>
+                <button type="submit" disabled={passwordMutation.isPending} className="flex-1 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg py-2">
                   {passwordMutation.isPending ? 'Guardando...' : 'Cambiar'}
                 </button>
               </div>
             </form>
           </div>
         </div>
+      )}
+
+      {permTarget && (
+        <PermissionEditor targetUser={permTarget} roles={roles ?? []} onClose={() => setPermTarget(null)} />
       )}
     </div>
   )

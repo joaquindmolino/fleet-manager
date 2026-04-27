@@ -8,11 +8,19 @@ export interface Tenant {
   updated_at: string
 }
 
+export interface UserPermissionOverride {
+  permission_id: string
+  module: string
+  action: string
+  granted: boolean
+}
+
 export interface User {
   id: string
   tenant_id: string
   role_id: string | null
   role: Role | null
+  permission_overrides: UserPermissionOverride[]
   email: string
   full_name: string
   is_active: boolean
