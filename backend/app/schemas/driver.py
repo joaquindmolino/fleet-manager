@@ -26,6 +26,7 @@ class DriverUpdate(BaseModel):
     license_expiry: date | None = None
     phone: str | None = None
     vehicle_id: uuid.UUID | None = None
+    user_id: uuid.UUID | None = None
     status: EstadoChofer | None = None
     notes: str | None = None
 

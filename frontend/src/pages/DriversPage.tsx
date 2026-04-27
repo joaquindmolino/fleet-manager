@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Users, AlertTriangle } from 'lucide-react'
+import { Plus, Users, AlertTriangle, UserCheck } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
 import type { PaginatedResponse, Driver, Vehicle } from '@/types'
@@ -15,6 +15,8 @@ const STATUS_COLOR: Record<string, string> = {
   baja: 'bg-gray-100 text-gray-500',
 }
 
+interface UserPicker { id: string; full_name: string; email: string; is_active: boolean }
+
 function licenseExpiryInfo(expiry: string | null): { label: string; color: string; warn: boolean } {
   if (!expiry) return { label: '—', color: 'text-gray-400', warn: false }
   const days = Math.ceil((new Date(expiry).getTime() - Date.now()) / 86_400_000)
@@ -24,8 +26,8 @@ function licenseExpiryInfo(expiry: string | null): { label: string; color: strin
   return { label, color: 'text-gray-500', warn: false }
 }
 
-interface DF { full_name: string; license_number: string; license_expiry: string; phone: string; vehicle_id: string; status: string }
-const EMPTY: DF = { full_name: '', license_number: '', license_expiry: '', phone: '', vehicle_id: '', status: 'activo' }
+interface DF { full_name: string; license_number: string; license_expiry: string; phone: string; vehicle_id: string; user_id: string; status: string }
+const EMPTY: DF = { full_name: '', license_number: '', license_expiry: '', phone: '', vehicle_id: '', user_id: '', status: 'activo' }
 
 function toBody(f: DF, isNew: boolean) {
   return {
@@ -34,6 +36,7 @@ function toBody(f: DF, isNew: boolean) {
     license_expiry: f.license_expiry || null,
     phone: f.phone || null,
     vehicle_id: f.vehicle_id || null,
+    user_id: f.user_id || null,
     ...(isNew ? {} : { status: f.status }),
   }
 }
@@ -54,6 +57,13 @@ export default function DriversPage() {
   const { data: vehicles } = useList<Vehicle>('vehicles', '/vehicles')
   const vehicleMap = Object.fromEntries((vehicles ?? []).map(v => [v.id, v]))
 
+  const { data: userPickers } = useQuery({
+    queryKey: ['users-for-assignment'],
+    queryFn: () => api.get<UserPicker[]>('/users/for-assignment').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const userMap = Object.fromEntries((userPickers ?? []).map(u => [u.id, u]))
+
   const createMutation = useMutation({
     mutationFn: (body: object) => api.post('/drivers', body),
     onSuccess: () => {
@@ -71,7 +81,7 @@ export default function DriversPage() {
 
   function startEdit(d: Driver) {
     setAddingRow(false); setEditingId(d.id)
-    setEditForm({ full_name: d.full_name, license_number: d.license_number ?? '', license_expiry: d.license_expiry ?? '', phone: d.phone ?? '', vehicle_id: d.vehicle_id ?? '', status: d.status })
+    setEditForm({ full_name: d.full_name, license_number: d.license_number ?? '', license_expiry: d.license_expiry ?? '', phone: d.phone ?? '', vehicle_id: d.vehicle_id ?? '', user_id: d.user_id ?? '', status: d.status })
   }
   function ef(k: keyof DF, v: string) { setEditForm(p => ({ ...p, [k]: v })) }
   function af(k: keyof DF, v: string) { setAddForm(p => ({ ...p, [k]: v })) }
@@ -81,6 +91,12 @@ export default function DriversPage() {
   const addRow = 'border-b border-green-200 bg-green-50'
 
   const activeVehicles = (vehicles ?? []).filter(v => v.status !== 'baja')
+
+  // usuarios ya asignados a otros conductores (para filtrar del picker)
+  const assignedUserIds = new Set(
+    (data?.items ?? []).filter(d => d.user_id && d.id !== editingId).map(d => d.user_id!)
+  )
+  const availableUsers = (userPickers ?? []).filter(u => !assignedUserIds.has(u.id))
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -94,7 +110,7 @@ export default function DriversPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                {['Nombre', 'Teléfono', 'Vehículo', 'Estado', ''].map(h => (
+                {['Nombre', 'Teléfono', 'Vehículo', 'Usuario de acceso', 'Estado', ''].map(h => (
                   <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -121,6 +137,12 @@ export default function DriversPage() {
                       {activeVehicles.map(v => <option key={v.id} value={v.id}>{v.plate} — {v.brand} {v.model}</option>)}
                     </select>
                   </td>
+                  <td className="px-3 py-2">
+                    <select form="add-d" value={addForm.user_id} onChange={e => af('user_id', e.target.value)} className={CS}>
+                      <option value="">Sin usuario</option>
+                      {availableUsers.map(u => <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>)}
+                    </select>
+                  </td>
                   <td className="px-3 py-2 text-gray-400 text-xs">Activo</td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
@@ -132,9 +154,10 @@ export default function DriversPage() {
               )}
 
               {data?.items.length === 0 && !addingRow
-                ? <tr><td colSpan={5} className="p-12 text-center"><Users size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay conductores registrados.</p></td></tr>
+                ? <tr><td colSpan={6} className="p-12 text-center"><Users size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay conductores registrados.</p></td></tr>
                 : data?.items.map(d => {
                   const v = d.vehicle_id ? vehicleMap[d.vehicle_id] : null
+                  const u = d.user_id ? userMap[d.user_id] : null
                   const expiry = licenseExpiryInfo(d.license_expiry)
                   return editingId === d.id ? (
                     <tr key={d.id} className={editRow}>
@@ -155,6 +178,15 @@ export default function DriversPage() {
                         <select form={`e-${d.id}`} value={editForm.vehicle_id} onChange={e => ef('vehicle_id', e.target.value)} className={CS}>
                           <option value="">Sin asignar</option>
                           {activeVehicles.map(v2 => <option key={v2.id} value={v2.id}>{v2.plate} — {v2.brand} {v2.model}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2">
+                        <select form={`e-${d.id}`} value={editForm.user_id} onChange={e => ef('user_id', e.target.value)} className={CS}>
+                          <option value="">Sin usuario</option>
+                          {/* incluir el usuario actualmente asignado aunque ya no esté en "availableUsers" */}
+                          {(userPickers ?? [])
+                            .filter(u2 => !assignedUserIds.has(u2.id) || u2.id === d.user_id)
+                            .map(u2 => <option key={u2.id} value={u2.id}>{u2.full_name} ({u2.email})</option>)}
                         </select>
                       </td>
                       <td className="px-3 py-2">
@@ -189,6 +221,11 @@ export default function DriversPage() {
                         {v
                           ? <span className="font-mono font-semibold text-gray-800 text-xs">{v.plate} <span className="font-normal text-gray-400">{v.brand} {v.model}</span></span>
                           : <span className="text-gray-300 text-xs">Sin asignar</span>}
+                      </td>
+                      <td className="px-3 py-3">
+                        {u
+                          ? <span className="inline-flex items-center gap-1 text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full font-medium"><UserCheck size={11} />{u.full_name}</span>
+                          : <span className="text-gray-300 text-xs">Sin usuario</span>}
                       </td>
                       <td className="px-3 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[d.status]}`}>{STATUS_LABEL[d.status] ?? d.status}</span></td>
                       <td className="px-3 py-3 text-right"><button onClick={() => startEdit(d)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button></td>

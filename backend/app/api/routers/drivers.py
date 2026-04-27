@@ -5,9 +5,11 @@ import math
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
 from app.models.driver import Driver
+from app.models.user import User
 from app.schemas.common import PaginatedResponse
 from app.schemas.driver import DriverCreate, DriverResponse, DriverUpdate
 
@@ -16,6 +18,28 @@ router = APIRouter(prefix="/drivers", tags=["drivers"])
 _can_ver = Depends(make_permission_checker("flota", "ver"))
 _can_crear = Depends(make_permission_checker("flota", "crear"))
 _can_editar = Depends(make_permission_checker("flota", "editar"))
+
+
+async def _validate_user_id(
+    user_id: uuid.UUID | None,
+    tenant_id: uuid.UUID,
+    db: AsyncSession,
+    exclude_driver_id: uuid.UUID | None = None,
+) -> None:
+    """Valida que el user_id pertenezca al tenant y no esté asignado a otro conductor."""
+    if user_id is None:
+        return
+    user = (await db.execute(
+        select(User).where(User.id == user_id, User.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
+    existing = select(Driver).where(Driver.user_id == user_id, Driver.tenant_id == tenant_id)
+    if exclude_driver_id:
+        existing = existing.where(Driver.id != exclude_driver_id)
+    if (await db.execute(existing)).scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El usuario ya está asignado a otro conductor")
 
 
 @router.get("", response_model=PaginatedResponse[DriverResponse], dependencies=[_can_ver])
@@ -52,6 +76,7 @@ async def list_drivers(
 
 @router.post("", response_model=DriverResponse, status_code=status.HTTP_201_CREATED, dependencies=[_can_crear])
 async def create_driver(body: DriverCreate, current_user: CurrentUser, db: DbSession) -> Driver:
+    await _validate_user_id(body.user_id, current_user.tenant_id, db)
     driver = Driver(tenant_id=current_user.tenant_id, **body.model_dump())
     db.add(driver)
     await db.flush()
@@ -81,7 +106,10 @@ async def update_driver(
     if driver is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chofer no encontrado")
 
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    if "user_id" in data:
+        await _validate_user_id(data["user_id"], current_user.tenant_id, db, exclude_driver_id=driver_id)
+    for field, value in data.items():
         setattr(driver, field, value)
     await db.flush()
     await db.refresh(driver)

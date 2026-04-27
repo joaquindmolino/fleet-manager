@@ -55,3 +55,12 @@ class UserUpdate(BaseModel):
 
 class UserPasswordChange(BaseModel):
     password: str
+
+
+class UserPickerResponse(BaseModel):
+    id: uuid.UUID
+    full_name: str
+    email: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}

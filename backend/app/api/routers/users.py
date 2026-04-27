@@ -11,7 +11,7 @@ from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
 from app.core.security import hash_password
 from app.models.user import User, Role
 from app.schemas.common import PaginatedResponse
-from app.schemas.user import UserCreate, UserResponse, UserUpdate, UserPasswordChange, RoleResponse
+from app.schemas.user import UserCreate, UserResponse, UserUpdate, UserPasswordChange, RoleResponse, UserPickerResponse
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -24,6 +24,17 @@ _LOAD_ROLE = selectinload(User.role).selectinload(Role.permissions)
 
 def _user_query(tenant_id: uuid.UUID):
     return select(User).where(User.tenant_id == tenant_id).options(_LOAD_ROLE)
+
+
+@router.get("/for-assignment", response_model=list[UserPickerResponse])
+async def list_users_for_assignment(current_user: CurrentUser, db: DbSession) -> list[User]:
+    """Lista usuarios del tenant para asignar a conductores u otras entidades. Accesible a cualquier usuario autenticado."""
+    result = await db.execute(
+        select(User)
+        .where(User.tenant_id == current_user.tenant_id, User.is_active.is_(True))
+        .order_by(User.full_name)
+    )
+    return list(result.scalars().all())
 
 
 @router.get("/roles", response_model=list[RoleResponse])
