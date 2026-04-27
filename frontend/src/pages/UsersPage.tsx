@@ -37,7 +37,7 @@ type CellState = null | boolean  // null = heredado del rol
 interface PermMatrix { [moduleAction: string]: CellState }
 
 function buildMatrix(
-  rolePerms: { module: string; action: string }[],
+  _rolePerms: { module: string; action: string }[],
   overrides: UserPermissionOverride[]
 ): PermMatrix {
   const m: PermMatrix = {}
