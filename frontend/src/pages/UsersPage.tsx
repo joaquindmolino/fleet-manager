@@ -65,7 +65,7 @@ export default function UsersPage() {
   function af(k: keyof UF, v: string) { setAddForm(p => ({ ...p, [k]: v })) }
 
   function toggleActive(u: User) {
-    if (u.id === me.id) return
+    if (me && u.id === me.id) return
     updateMutation.mutate({ id: u.id, body: { is_active: !u.is_active } })
   }
 
