@@ -13,9 +13,9 @@ from app.schemas.vehicle import VehicleCreate, VehicleResponse, VehicleUpdate
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
-_can_ver = Depends(make_permission_checker("flota", "ver"))
-_can_crear = Depends(make_permission_checker("flota", "crear"))
-_can_editar = Depends(make_permission_checker("flota", "editar"))
+_can_ver = Depends(make_permission_checker("vehiculos", "ver"))
+_can_crear = Depends(make_permission_checker("vehiculos", "crear"))
+_can_editar = Depends(make_permission_checker("vehiculos", "editar"))
 
 
 @router.get("", response_model=PaginatedResponse[VehicleResponse], dependencies=[_can_ver])
@@ -102,7 +102,7 @@ async def delete_vehicle(
     vehicle_id: uuid.UUID,
     current_user: CurrentUser,
     db: DbSession,
-    _: None = Depends(make_permission_checker("flota", "eliminar")),
+    _: None = Depends(make_permission_checker("vehiculos", "eliminar")),
 ) -> None:
     """Da de baja lógica a un vehículo (cambia estado a 'baja')."""
     result = await db.execute(

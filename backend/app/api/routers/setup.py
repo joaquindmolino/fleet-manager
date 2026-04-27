@@ -3,49 +3,56 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import CurrentUser, DbSession, require_superadmin
 from app.core.config import settings
 from app.core.security import hash_password
 from app.models.tenant import Tenant
-from app.models.user import User, Role, Permission
+from app.models.user import User, Role, Permission, role_permissions
 
 router = APIRouter(prefix="/setup", tags=["setup"])
 
-# Permisos globales: todas las combinaciones módulo × acción
-_MODULES = ["flota", "mantenimiento", "viajes", "proveedores", "gps", "reportes", "usuarios", "configuracion"]
+_MODULES = [
+    "vehiculos", "conductores", "maquinas",
+    "mantenimiento", "viajes", "proveedores",
+    "gps", "reportes", "usuarios", "configuracion",
+]
 _ACTIONS = ["ver", "crear", "editar", "aprobar", "cerrar", "eliminar"]
 
-# Definición de roles base: nombre → set de (módulo, acción)
 _DEFAULT_ROLES: dict[str, set[tuple[str, str]]] = {
     "Administrador": {(m, a) for m in _MODULES for a in _ACTIONS},
     "Encargado de mantenimiento": {
-        ("flota", "ver"), ("flota", "crear"), ("flota", "editar"),
+        ("vehiculos", "ver"), ("vehiculos", "crear"), ("vehiculos", "editar"),
+        ("conductores", "ver"), ("conductores", "crear"), ("conductores", "editar"),
+        ("maquinas", "ver"), ("maquinas", "crear"), ("maquinas", "editar"),
         ("mantenimiento", "ver"), ("mantenimiento", "crear"), ("mantenimiento", "editar"), ("mantenimiento", "cerrar"),
         ("proveedores", "ver"), ("proveedores", "crear"), ("proveedores", "editar"),
         ("viajes", "ver"),
         ("reportes", "ver"),
     },
     "Coordinador de viajes": {
-        ("flota", "ver"),
+        ("vehiculos", "ver"),
+        ("conductores", "ver"),
         ("viajes", "ver"), ("viajes", "crear"), ("viajes", "editar"), ("viajes", "cerrar"),
         ("reportes", "ver"),
     },
     "Chofer": {
-        ("flota", "ver"),
+        ("vehiculos", "ver"),
+        ("conductores", "ver"),
         ("viajes", "ver"),
     },
     "Operario de depósito": {
-        ("flota", "ver"),
+        ("maquinas", "ver"),
         ("mantenimiento", "ver"),
     },
 }
 
 
-async def seed_tenant_roles(tenant_id: uuid.UUID, db: AsyncSession) -> int:
-    """Crea los roles base del sistema para un tenant. Omite los que ya existen. Retorna cantidad creada."""
+async def seed_tenant_roles(tenant_id: uuid.UUID, db: AsyncSession) -> dict:
+    """Crea o actualiza los roles base del sistema para un tenant. Retorna contadores."""
     # Obtener o crear todos los permisos globales
     existing_perms = (await db.execute(select(Permission))).scalars().all()
     perm_map: dict[tuple[str, str], Permission] = {(p.module, p.action): p for p in existing_perms}
@@ -60,28 +67,31 @@ async def seed_tenant_roles(tenant_id: uuid.UUID, db: AsyncSession) -> int:
 
     await db.flush()
 
-    # Roles ya existentes para este tenant
-    existing_roles = (
-        await db.execute(select(Role.name).where(Role.tenant_id == tenant_id))
-    ).scalars().all()
-    existing_names = set(existing_roles)
+    # Cargar roles existentes del tenant con sus permisos
+    existing_roles_result = (await db.execute(
+        select(Role)
+        .where(Role.tenant_id == tenant_id)
+        .options(selectinload(Role.permissions))
+    )).scalars().all()
+    existing_by_name: dict[str, Role] = {r.name: r for r in existing_roles_result}
 
-    created = 0
-    for role_name, perms in _DEFAULT_ROLES.items():
-        if role_name in existing_names:
-            continue
-        role = Role(
-            id=uuid.uuid4(),
-            tenant_id=tenant_id,
-            name=role_name,
-            is_system=True,
-        )
-        role.permissions = [perm_map[key] for key in perms if key in perm_map]
-        db.add(role)
-        created += 1
+    created = updated = 0
+    for role_name, target_perms in _DEFAULT_ROLES.items():
+        target_perm_objs = [perm_map[key] for key in target_perms if key in perm_map]
+
+        if role_name in existing_by_name:
+            # Actualizar permisos del rol existente
+            role = existing_by_name[role_name]
+            role.permissions = target_perm_objs
+            updated += 1
+        else:
+            role = Role(id=uuid.uuid4(), tenant_id=tenant_id, name=role_name, is_system=True)
+            role.permissions = target_perm_objs
+            db.add(role)
+            created += 1
 
     await db.flush()
-    return created
+    return {"creados": created, "actualizados": updated}
 
 
 class SetupRequest(BaseModel):
@@ -95,7 +105,6 @@ class SetupRequest(BaseModel):
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def initial_setup(body: SetupRequest, db: DbSession) -> dict:
     """Crea el tenant, superadmin y roles base iniciales. Solo funciona una vez."""
-
     if body.setup_key != settings.SECRET_KEY:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Setup key incorrecta.")
 
@@ -112,25 +121,18 @@ async def initial_setup(body: SetupRequest, db: DbSession) -> dict:
     await db.flush()
 
     admin = User(
-        id=uuid.uuid4(),
-        tenant_id=tenant.id,
-        email=body.admin_email,
-        full_name=body.admin_nombre,
+        id=uuid.uuid4(), tenant_id=tenant.id,
+        email=body.admin_email, full_name=body.admin_nombre,
         hashed_password=hash_password(body.admin_password),
-        is_active=True,
-        is_superadmin=True,
+        is_active=True, is_superadmin=True,
     )
     db.add(admin)
     await db.flush()
 
-    roles_creados = await seed_tenant_roles(tenant.id, db)
+    result = await seed_tenant_roles(tenant.id, db)
     await db.commit()
 
-    return {
-        "ok": True,
-        "mensaje": f"Sistema inicializado. Podés entrar con {body.admin_email}.",
-        "roles_creados": roles_creados,
-    }
+    return {"ok": True, "mensaje": f"Sistema inicializado. Podés entrar con {body.admin_email}.", **result}
 
 
 @router.post("/seed-roles", status_code=status.HTTP_200_OK)
@@ -139,7 +141,7 @@ async def seed_roles(
     current_user: CurrentUser,
     _: User = Depends(require_superadmin),
 ) -> dict:
-    """Crea los roles base para el tenant del superadmin autenticado. Idempotente: omite los que ya existen."""
-    created = await seed_tenant_roles(current_user.tenant_id, db)
+    """Crea o actualiza los roles base para el tenant autenticado. Seguro de ejecutar varias veces."""
+    result = await seed_tenant_roles(current_user.tenant_id, db)
     await db.commit()
-    return {"ok": True, "roles_creados": created}
+    return {"ok": True, **result}

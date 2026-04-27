@@ -14,7 +14,9 @@ const EMPTY: UF = { full_name: '', email: '', password: '', role_id: '' }
 interface PasswordForm { password: string; confirm: string }
 
 const MODULES = [
-  { key: 'flota', label: 'Flota' },
+  { key: 'vehiculos', label: 'Vehículos' },
+  { key: 'conductores', label: 'Conductores' },
+  { key: 'maquinas', label: 'Máquinas' },
   { key: 'mantenimiento', label: 'Mantenimiento' },
   { key: 'viajes', label: 'Viajes' },
   { key: 'proveedores', label: 'Proveedores' },

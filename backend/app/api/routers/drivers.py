@@ -15,9 +15,9 @@ from app.schemas.driver import DriverCreate, DriverResponse, DriverUpdate
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
 
-_can_ver = Depends(make_permission_checker("flota", "ver"))
-_can_crear = Depends(make_permission_checker("flota", "crear"))
-_can_editar = Depends(make_permission_checker("flota", "editar"))
+_can_ver = Depends(make_permission_checker("conductores", "ver"))
+_can_crear = Depends(make_permission_checker("conductores", "crear"))
+_can_editar = Depends(make_permission_checker("conductores", "editar"))
 
 
 async def _validate_user_id(

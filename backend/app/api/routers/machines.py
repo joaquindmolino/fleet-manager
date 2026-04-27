@@ -13,9 +13,9 @@ from app.schemas.machine import MachineCreate, MachineResponse, MachineUpdate
 
 router = APIRouter(prefix="/machines", tags=["machines"])
 
-_can_ver = Depends(make_permission_checker("flota", "ver"))
-_can_crear = Depends(make_permission_checker("flota", "crear"))
-_can_editar = Depends(make_permission_checker("flota", "editar"))
+_can_ver = Depends(make_permission_checker("maquinas", "ver"))
+_can_crear = Depends(make_permission_checker("maquinas", "crear"))
+_can_editar = Depends(make_permission_checker("maquinas", "editar"))
 
 
 @router.get("", response_model=PaginatedResponse[MachineResponse], dependencies=[_can_ver])
