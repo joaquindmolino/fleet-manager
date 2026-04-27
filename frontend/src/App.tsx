@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import { usePermissions } from '@/hooks/usePermissions'
 import Layout from '@/components/Layout'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
@@ -20,6 +21,14 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function RequirePermission({ module, action, children }: { module: string; action: string; children: React.ReactNode }) {
+  const { isLoading } = useAuth()
+  const { can } = usePermissions()
+  if (isLoading) return null
+  if (!can(module, action)) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -35,14 +44,14 @@ export default function App() {
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="vehicles" element={<VehiclesPage />} />
-          <Route path="drivers" element={<DriversPage />} />
-          <Route path="machines" element={<MachinesPage />} />
-          <Route path="maintenance" element={<MaintenancePage />} />
-          <Route path="trips" element={<TripsPage />} />
-          <Route path="suppliers" element={<SuppliersPage />} />
-          <Route path="work-orders" element={<WorkOrdersPage />} />
-          <Route path="tires" element={<TiresPage />} />
+          <Route path="vehicles" element={<RequirePermission module="vehiculos" action="ver"><VehiclesPage /></RequirePermission>} />
+          <Route path="drivers" element={<RequirePermission module="conductores" action="ver"><DriversPage /></RequirePermission>} />
+          <Route path="machines" element={<RequirePermission module="maquinas" action="ver"><MachinesPage /></RequirePermission>} />
+          <Route path="maintenance" element={<RequirePermission module="mantenimiento" action="ver"><MaintenancePage /></RequirePermission>} />
+          <Route path="work-orders" element={<RequirePermission module="mantenimiento" action="ver"><WorkOrdersPage /></RequirePermission>} />
+          <Route path="tires" element={<RequirePermission module="mantenimiento" action="ver"><TiresPage /></RequirePermission>} />
+          <Route path="trips" element={<RequirePermission module="viajes" action="ver"><TripsPage /></RequirePermission>} />
+          <Route path="suppliers" element={<RequirePermission module="proveedores" action="ver"><SuppliersPage /></RequirePermission>} />
           <Route path="users" element={<UsersPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
