@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.api.dependencies import DbSession
 from app.core.config import settings
-from app.core.security import get_password_hash
+from app.core.security import hash_password
 from app.models.tenant import Tenant
 from app.models.user import User
 
@@ -49,7 +49,7 @@ async def initial_setup(body: SetupRequest, db: DbSession) -> dict:
         tenant_id=tenant.id,
         email=body.admin_email,
         full_name=body.admin_nombre,
-        hashed_password=get_password_hash(body.admin_password),
+        hashed_password=hash_password(body.admin_password),
         is_active=True,
         is_superadmin=True,
     )
