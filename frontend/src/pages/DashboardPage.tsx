@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Truck, Wrench, Route, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
+import { usePermissions } from '@/hooks/usePermissions'
 import type { PaginatedResponse, WorkOrder } from '@/types'
 
 interface DashboardStats {
@@ -57,6 +58,9 @@ function StatCard({ label, value, icon: Icon, color, to }: {
 }
 
 export default function DashboardPage() {
+  const { can } = usePermissions()
+  const canSeeWorkOrders = can('mantenimiento', 'ver')
+
   const { data: stats, isLoading: loadingStats } = useQuery({
     queryKey: ['stats', 'dashboard'],
     queryFn: () => api.get<DashboardStats>('/stats/dashboard').then((r) => r.data),
@@ -68,6 +72,7 @@ export default function DashboardPage() {
       api
         .get<PaginatedResponse<WorkOrder>>('/work-orders?size=5&status_filter=abierta')
         .then((r) => r.data),
+    enabled: canSeeWorkOrders,
   })
 
   return (
@@ -108,7 +113,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {canSeeWorkOrders && <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">Órdenes de trabajo abiertas</h2>
           <Link to="/work-orders" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
@@ -154,7 +159,7 @@ export default function DashboardPage() {
             </tbody>
           </table>
         )}
-      </div>
+      </div>}
     </div>
   )
 }

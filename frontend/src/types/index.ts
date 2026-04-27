@@ -12,6 +12,7 @@ export interface User {
   id: string
   tenant_id: string
   role_id: string | null
+  role: Role | null
   email: string
   full_name: string
   is_active: boolean
@@ -156,12 +157,19 @@ export interface Tire {
   updated_at: string
 }
 
+export interface Permission {
+  id: string
+  module: string
+  action: string
+}
+
 export interface Role {
   id: string
   tenant_id: string
   name: string
   description: string | null
   is_system: boolean
+  permissions: Permission[]
 }
 
 export interface PaginatedResponse<T> {

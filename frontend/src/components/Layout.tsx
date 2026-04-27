@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import { usePermissions } from '@/hooks/usePermissions'
 import {
   Truck, Wrench, Route, Package, BarChart3,
   LogOut, User, Forklift, Users, ClipboardList, Circle, UserCog,
@@ -8,16 +9,16 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const NAV_ITEMS = [
+const NAV_ITEMS: { to: string; label: string; icon: React.ElementType; perm?: [string, string] }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: BarChart3 },
-  { to: '/vehicles', label: 'Vehículos', icon: Truck },
-  { to: '/drivers', label: 'Conductores', icon: Users },
-  { to: '/machines', label: 'Máquinas', icon: Forklift },
-  { to: '/maintenance', label: 'Mantenimiento', icon: Wrench },
-  { to: '/work-orders', label: 'Órdenes de trabajo', icon: ClipboardList },
-  { to: '/tires', label: 'Neumáticos', icon: Circle },
-  { to: '/trips', label: 'Viajes', icon: Route },
-  { to: '/suppliers', label: 'Proveedores', icon: Package },
+  { to: '/vehicles', label: 'Vehículos', icon: Truck, perm: ['flota', 'ver'] },
+  { to: '/drivers', label: 'Conductores', icon: Users, perm: ['flota', 'ver'] },
+  { to: '/machines', label: 'Máquinas', icon: Forklift, perm: ['flota', 'ver'] },
+  { to: '/maintenance', label: 'Mantenimiento', icon: Wrench, perm: ['mantenimiento', 'ver'] },
+  { to: '/work-orders', label: 'Órdenes de trabajo', icon: ClipboardList, perm: ['mantenimiento', 'ver'] },
+  { to: '/tires', label: 'Neumáticos', icon: Circle, perm: ['mantenimiento', 'ver'] },
+  { to: '/trips', label: 'Viajes', icon: Route, perm: ['viajes', 'ver'] },
+  { to: '/suppliers', label: 'Proveedores', icon: Package, perm: ['proveedores', 'ver'] },
 ]
 
 const ADMIN_ITEMS = [
@@ -26,6 +27,7 @@ const ADMIN_ITEMS = [
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { user, logout } = useAuth()
+  const { can } = usePermissions()
   const navigate = useNavigate()
 
   function handleLogout() {
@@ -33,10 +35,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     navigate('/login')
   }
 
+  const visibleItems = NAV_ITEMS.filter(item => !item.perm || can(item.perm[0], item.perm[1]))
+
   return (
     <div className="flex flex-col h-full">
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+        {visibleItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
