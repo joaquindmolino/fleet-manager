@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Wrench, ClipboardList } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
+import { usePermissions } from '@/hooks/usePermissions'
 import type { PaginatedResponse, MaintenanceService, MaintenanceRecord, Vehicle, Machine, Supplier } from '@/types'
 
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
@@ -24,6 +25,10 @@ const APPLIES_LABEL: Record<string, string> = { vehiculo: 'Vehículo', maquina: 
 
 export default function MaintenancePage() {
   const qc = useQueryClient()
+  const { can } = usePermissions()
+  const canSeeMachines = can('maquinas', 'ver')
+  const canSeeVehicles = can('vehiculos', 'ver')
+  const canSeeSuppliers = can('proveedores', 'ver')
   const [tab, setTab] = useState<Tab>('records')
   const [recordPage, setRecordPage] = useState(1)
 
@@ -50,15 +55,15 @@ export default function MaintenancePage() {
     enabled: tab === 'services',
   })
 
-  const { data: vehicles } = useList<Vehicle>('vehicles', '/vehicles')
-  const { data: machines } = useList<Machine>('machines', '/machines')
+  const { data: vehicles } = useList<Vehicle>('vehicles', '/vehicles', 100, canSeeVehicles)
+  const { data: machines } = useList<Machine>('machines', '/machines', 100, canSeeMachines)
   // Services list also used in records dropdowns — fetch as plain list
   const { data: allServices } = useQuery({
     queryKey: ['maintenance-services'],
     queryFn: () => api.get<MaintenanceService[]>('/maintenance/services').then(r => r.data),
     staleTime: 60_000,
   })
-  const { data: suppliers } = useList<Supplier>('suppliers', '/suppliers')
+  const { data: suppliers } = useList<Supplier>('suppliers', '/suppliers', 100, canSeeSuppliers)
 
   const vehicleMap = Object.fromEntries((vehicles ?? []).map(v => [v.id, v]))
   const machineMap = Object.fromEntries((machines ?? []).map(m => [m.id, m]))
@@ -164,14 +169,18 @@ export default function MaintenancePage() {
                     <td className="px-3 py-2"><input form="add-rec" required type="date" value={recAddForm.service_date} onChange={e => raf('service_date', e.target.value)} className={CI} /></td>
                     <td className="px-3 py-2">
                       <div className="flex flex-col gap-1">
-                        <select form="add-rec" value={recAddForm.vehicle_id} onChange={e => { raf('vehicle_id', e.target.value); if (e.target.value) raf('machine_id', '') }} className={CS}>
-                          <option value="">— Vehículo</option>
-                          {(vehicles ?? []).map(v => <option key={v.id} value={v.id}>{v.plate} {v.brand} {v.model}</option>)}
-                        </select>
-                        <select form="add-rec" value={recAddForm.machine_id} onChange={e => { raf('machine_id', e.target.value); if (e.target.value) raf('vehicle_id', '') }} className={CS}>
-                          <option value="">— Máquina</option>
-                          {(machines ?? []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
+                        {canSeeVehicles && (
+                          <select form="add-rec" value={recAddForm.vehicle_id} onChange={e => { raf('vehicle_id', e.target.value); if (e.target.value) raf('machine_id', '') }} className={CS}>
+                            <option value="">— Vehículo</option>
+                            {(vehicles ?? []).map(v => <option key={v.id} value={v.id}>{v.plate} {v.brand} {v.model}</option>)}
+                          </select>
+                        )}
+                        {canSeeMachines && (
+                          <select form="add-rec" value={recAddForm.machine_id} onChange={e => { raf('machine_id', e.target.value); if (e.target.value) raf('vehicle_id', '') }} className={CS}>
+                            <option value="">— Máquina</option>
+                            {(machines ?? []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                          </select>
+                        )}
                       </div>
                     </td>
                     <td className="px-3 py-2">
@@ -211,14 +220,18 @@ export default function MaintenancePage() {
                         <td className="px-3 py-2"><input form={`er-${r.id}`} required type="date" value={recEditForm.service_date} onChange={e => ref('service_date', e.target.value)} className={CI} /></td>
                         <td className="px-3 py-2">
                           <div className="flex flex-col gap-1">
-                            <select form={`er-${r.id}`} value={recEditForm.vehicle_id} onChange={e => { ref('vehicle_id', e.target.value); if (e.target.value) ref('machine_id', '') }} className={CS}>
-                              <option value="">— Vehículo</option>
-                              {(vehicles ?? []).map(v2 => <option key={v2.id} value={v2.id}>{v2.plate} {v2.brand} {v2.model}</option>)}
-                            </select>
-                            <select form={`er-${r.id}`} value={recEditForm.machine_id} onChange={e => { ref('machine_id', e.target.value); if (e.target.value) ref('vehicle_id', '') }} className={CS}>
-                              <option value="">— Máquina</option>
-                              {(machines ?? []).map(m2 => <option key={m2.id} value={m2.id}>{m2.name}</option>)}
-                            </select>
+                            {canSeeVehicles && (
+                              <select form={`er-${r.id}`} value={recEditForm.vehicle_id} onChange={e => { ref('vehicle_id', e.target.value); if (e.target.value) ref('machine_id', '') }} className={CS}>
+                                <option value="">— Vehículo</option>
+                                {(vehicles ?? []).map(v2 => <option key={v2.id} value={v2.id}>{v2.plate} {v2.brand} {v2.model}</option>)}
+                              </select>
+                            )}
+                            {canSeeMachines && (
+                              <select form={`er-${r.id}`} value={recEditForm.machine_id} onChange={e => { ref('machine_id', e.target.value); if (e.target.value) ref('vehicle_id', '') }} className={CS}>
+                                <option value="">— Máquina</option>
+                                {(machines ?? []).map(m2 => <option key={m2.id} value={m2.id}>{m2.name}</option>)}
+                              </select>
+                            )}
                           </div>
                         </td>
                         <td className="px-3 py-2">
