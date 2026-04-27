@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Route } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
+import { usePermissions } from '@/hooks/usePermissions'
 import type { PaginatedResponse, Trip, Vehicle, Driver } from '@/types'
 
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
@@ -27,6 +28,9 @@ interface CompleteModal { trip: Trip; end_odometer: string }
 
 export default function TripsPage() {
   const qc = useQueryClient()
+  const { can } = usePermissions()
+  const canSeeVehicles = can('vehiculos', 'ver')
+  const canSeeDrivers = can('conductores', 'ver')
   const [page, setPage] = useState(1)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EF>({ origin: '', destination: '', end_odometer: '' })
@@ -39,8 +43,8 @@ export default function TripsPage() {
     queryFn: () => api.get<PaginatedResponse<Trip>>(`/trips?page=${page}&size=20`).then(r => r.data),
   })
 
-  const { data: vehicles } = useList<Vehicle>('vehicles', '/vehicles')
-  const { data: drivers } = useList<Driver>('drivers', '/drivers')
+  const { data: vehicles } = useList<Vehicle>('vehicles', '/vehicles', 100, canSeeVehicles)
+  const { data: drivers } = useList<Driver>('drivers', '/drivers', 100, canSeeDrivers)
 
   const vehicleMap = Object.fromEntries((vehicles ?? []).map(v => [v.id, v]))
   const driverMap = Object.fromEntries((drivers ?? []).map(d => [d.id, d]))

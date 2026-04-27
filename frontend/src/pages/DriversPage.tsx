@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Users, AlertTriangle, UserCheck } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
+import { usePermissions } from '@/hooks/usePermissions'
 import type { PaginatedResponse, Driver, Vehicle } from '@/types'
 
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
@@ -43,6 +44,8 @@ function toBody(f: DF, isNew: boolean) {
 
 export default function DriversPage() {
   const qc = useQueryClient()
+  const { can } = usePermissions()
+  const canSeeVehicles = can('vehiculos', 'ver')
   const [page, setPage] = useState(1)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<DF>(EMPTY)
@@ -54,7 +57,7 @@ export default function DriversPage() {
     queryFn: () => api.get<PaginatedResponse<Driver>>(`/drivers?page=${page}&size=20`).then(r => r.data),
   })
 
-  const { data: vehicles } = useList<Vehicle>('vehicles', '/vehicles')
+  const { data: vehicles } = useList<Vehicle>('vehicles', '/vehicles', 100, canSeeVehicles)
   const vehicleMap = Object.fromEntries((vehicles ?? []).map(v => [v.id, v]))
 
   const { data: userPickers } = useQuery({

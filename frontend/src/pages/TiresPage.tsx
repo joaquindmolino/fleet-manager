@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Circle } from 'lucide-react'
 import { api } from '@/lib/api'
+import { usePermissions } from '@/hooks/usePermissions'
 import type { PaginatedResponse, Vehicle, Tire } from '@/types'
 
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
@@ -38,6 +39,8 @@ function KmBar({ current, limit }: { current: number; limit: number | null }) {
 
 export default function TiresPage() {
   const qc = useQueryClient()
+  const { can } = usePermissions()
+  const canSeeVehicles = can('vehiculos', 'ver')
   const [selectedVehicleId, setSelectedVehicleId] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EF>({ position: '', brand: '', model: '', size: '', serial_number: '', km_limit: '', status: 'en_uso' })
@@ -48,6 +51,7 @@ export default function TiresPage() {
     queryKey: ['vehicles', 'all'],
     queryFn: () => api.get<PaginatedResponse<Vehicle>>('/vehicles?size=100').then(r => r.data.items),
     staleTime: 60_000,
+    enabled: canSeeVehicles,
   })
 
   const { data: tires, isLoading } = useQuery({

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, ClipboardList, CheckCircle } from 'lucide-react'
 import { api } from '@/lib/api'
+import { usePermissions } from '@/hooks/usePermissions'
 import type { PaginatedResponse, WorkOrder, Vehicle, Machine } from '@/types'
 
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
@@ -48,6 +49,9 @@ function toEditBody(f: WF) {
 
 export default function WorkOrdersPage() {
   const qc = useQueryClient()
+  const { can } = usePermissions()
+  const canSeeVehicles = can('vehiculos', 'ver')
+  const canSeeMachines = can('maquinas', 'ver')
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -70,11 +74,13 @@ export default function WorkOrdersPage() {
     queryKey: ['vehicles', 'all'],
     queryFn: () => api.get<PaginatedResponse<Vehicle>>('/vehicles?size=100').then(r => r.data.items),
     staleTime: 60_000,
+    enabled: canSeeVehicles,
   })
   const { data: machines } = useQuery({
     queryKey: ['machines', 'all'],
     queryFn: () => api.get<PaginatedResponse<Machine>>('/machines?size=100').then(r => r.data.items),
     staleTime: 60_000,
+    enabled: canSeeMachines,
   })
 
   const vehicleMap = Object.fromEntries((vehicles ?? []).map(v => [v.id, v]))
@@ -145,16 +151,20 @@ export default function WorkOrdersPage() {
                   <form id="add-wo" onSubmit={e => { e.preventDefault(); createMutation.mutate(toAddBody(addForm)) }} />
                   <td className="px-3 py-2"><input form="add-wo" required value={addForm.description} onChange={e => af('description', e.target.value)} placeholder="Descripción *" className={CI} /></td>
                   <td className="px-3 py-2">
-                    <select form="add-wo" value={addForm.vehicle_id} onChange={e => { af('vehicle_id', e.target.value); if (e.target.value) af('machine_id', '') }} className={CS}>
-                      <option value="">Sin vehículo</option>
-                      {(vehicles ?? []).map(v => <option key={v.id} value={v.id}>{v.plate} — {v.brand} {v.model}</option>)}
-                    </select>
+                    {canSeeVehicles
+                      ? <select form="add-wo" value={addForm.vehicle_id} onChange={e => { af('vehicle_id', e.target.value); if (e.target.value) af('machine_id', '') }} className={CS}>
+                          <option value="">Sin vehículo</option>
+                          {(vehicles ?? []).map(v => <option key={v.id} value={v.id}>{v.plate} — {v.brand} {v.model}</option>)}
+                        </select>
+                      : <span className="text-gray-300 text-xs">—</span>}
                   </td>
                   <td className="px-3 py-2">
-                    <select form="add-wo" value={addForm.machine_id} onChange={e => { af('machine_id', e.target.value); if (e.target.value) af('vehicle_id', '') }} className={CS}>
-                      <option value="">Sin máquina</option>
-                      {(machines ?? []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
+                    {canSeeMachines
+                      ? <select form="add-wo" value={addForm.machine_id} onChange={e => { af('machine_id', e.target.value); if (e.target.value) af('vehicle_id', '') }} className={CS}>
+                          <option value="">Sin máquina</option>
+                          {(machines ?? []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      : <span className="text-gray-300 text-xs">—</span>}
                   </td>
                   <td className="px-3 py-2">
                     <select form="add-wo" value={addForm.priority} onChange={e => af('priority', e.target.value)} className={CS}>
