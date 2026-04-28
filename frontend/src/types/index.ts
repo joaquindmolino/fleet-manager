@@ -144,6 +144,8 @@ export interface Trip {
   end_time: string | null
   status: 'planificado' | 'en_curso' | 'completado' | 'cancelado'
   notes: string | null
+  delivery_number: string | null
+  stops_count: number | null
 }
 
 export interface Tire {

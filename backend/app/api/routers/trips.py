@@ -8,17 +8,59 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
+from app.models.driver import Driver
 from app.models.trip import Trip
 from app.models.vehicle import Vehicle
 from app.models.tire import Tire
 from app.schemas.common import PaginatedResponse
-from app.schemas.trip import TripCreate, TripResponse, TripUpdate
+from app.schemas.trip import TripCreate, TripResponse, TripUpdate, QuickTripCreate
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
 _can_ver = Depends(make_permission_checker("viajes", "ver"))
 _can_crear = Depends(make_permission_checker("viajes", "crear"))
 _can_editar = Depends(make_permission_checker("viajes", "editar"))
+
+
+@router.post("/quick", response_model=TripResponse, status_code=status.HTTP_201_CREATED)
+async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSession) -> Trip:
+    """Carga rápida de reparto: auto-detecta el conductor y vehículo del usuario."""
+    driver = (await db.execute(
+        select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if driver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No tenés un perfil de conductor asignado. Pedile al administrador que te vincule.",
+        )
+    if driver.vehicle_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No tenés un vehículo asignado. Pedile al administrador que te asigne uno.",
+        )
+
+    trip = Trip(
+        tenant_id=current_user.tenant_id,
+        vehicle_id=driver.vehicle_id,
+        driver_id=driver.id,
+        origin="Depósito",
+        destination=f"Reparto {body.delivery_number}",
+        status="completado",
+        delivery_number=body.delivery_number,
+        stops_count=body.stops_count,
+        start_odometer=body.start_odometer,
+        notes=body.notes,
+    )
+    db.add(trip)
+    await db.flush()
+
+    if body.start_odometer is not None:
+        vehicle = (await db.execute(select(Vehicle).where(Vehicle.id == driver.vehicle_id))).scalar_one_or_none()
+        if vehicle and body.start_odometer > (vehicle.odometer or 0):
+            vehicle.odometer = body.start_odometer
+
+    await db.refresh(trip)
+    return trip
 
 
 @router.get("", response_model=PaginatedResponse[TripResponse], dependencies=[_can_ver])

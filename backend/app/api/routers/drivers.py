@@ -11,7 +11,7 @@ from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
 from app.models.driver import Driver
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
-from app.schemas.driver import DriverCreate, DriverResponse, DriverUpdate
+from app.schemas.driver import DriverCreate, DriverResponse, DriverUpdate, MyDriverResponse
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
 
@@ -40,6 +40,20 @@ async def _validate_user_id(
         existing = existing.where(Driver.id != exclude_driver_id)
     if (await db.execute(existing)).scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El usuario ya está asignado a otro conductor")
+
+
+@router.get("/me", response_model=MyDriverResponse)
+async def get_my_driver(current_user: CurrentUser, db: DbSession) -> MyDriverResponse:
+    """Retorna el perfil de conductor vinculado al usuario autenticado, incluyendo datos del vehículo."""
+    from sqlalchemy.orm import selectinload
+    driver = (await db.execute(
+        select(Driver)
+        .where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
+        .options(selectinload(Driver.vehicle))
+    )).scalar_one_or_none()
+    if driver is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No tenés un perfil de conductor asignado")
+    return MyDriverResponse.model_validate(driver)
 
 
 @router.get("", response_model=PaginatedResponse[DriverResponse], dependencies=[_can_ver])

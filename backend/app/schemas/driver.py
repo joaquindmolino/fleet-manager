@@ -39,3 +39,18 @@ class DriverResponse(DriverBase):
     status: EstadoChofer
 
     model_config = {"from_attributes": True}
+
+
+class VehicleBasic(BaseModel):
+    id: uuid.UUID
+    plate: str
+    brand: str
+    model: str
+    odometer: int
+
+    model_config = {"from_attributes": True}
+
+
+class MyDriverResponse(DriverResponse):
+    """Respuesta extendida del endpoint /drivers/me, incluye info del vehículo asignado."""
+    vehicle: VehicleBasic | None = None
