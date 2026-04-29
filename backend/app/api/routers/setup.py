@@ -49,6 +49,7 @@ _DEFAULT_ROLES: dict[str, set[tuple[str, str]]] = {
     },
     "Operario de depósito": {
         ("maquinas", "ver"),
+        ("maquinas", "editar"),
         ("mantenimiento", "ver"),
     },
 }

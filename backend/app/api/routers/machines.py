@@ -9,13 +9,28 @@ from sqlalchemy import select, func
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
 from app.models.machine import Machine
 from app.schemas.common import PaginatedResponse
-from app.schemas.machine import MachineCreate, MachineResponse, MachineUpdate
+from app.schemas.machine import MachineCreate, MachineResponse, MachineUpdate, MachineHoursUpdate
+from app.models.user import User
 
 router = APIRouter(prefix="/machines", tags=["machines"])
 
 _can_ver = Depends(make_permission_checker("maquinas", "ver"))
 _can_crear = Depends(make_permission_checker("maquinas", "crear"))
 _can_editar = Depends(make_permission_checker("maquinas", "editar"))
+
+MAX_HOURS_DELTA = 20
+
+
+def _is_admin_level(user: User) -> bool:
+    """Superadmin o usuario con permiso configuracion:editar (rol Administrador del tenant)."""
+    if user.is_superadmin:
+        return True
+    for ov in user.permission_overrides:
+        if ov.permission.module == "configuracion" and ov.permission.action == "editar":
+            return ov.granted
+    return user.role is not None and any(
+        p.module == "configuracion" and p.action == "editar" for p in user.role.permissions
+    )
 
 
 @router.get("", response_model=PaginatedResponse[MachineResponse], dependencies=[_can_ver])
@@ -71,6 +86,39 @@ async def update_machine(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Máquina no encontrada")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(machine, field, value)
+    await db.flush()
+    await db.refresh(machine)
+    return machine
+
+
+@router.patch("/{machine_id}/hours", response_model=MachineResponse, dependencies=[_can_editar])
+async def update_machine_hours(
+    machine_id: uuid.UUID,
+    body: MachineHoursUpdate,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> Machine:
+    """Actualiza las horas del odómetro. Operario: máximo +20 h. Administrador: sin límite superior."""
+    result = await db.execute(
+        select(Machine).where(Machine.id == machine_id, Machine.tenant_id == current_user.tenant_id)
+    )
+    machine = result.scalar_one_or_none()
+    if machine is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Máquina no encontrada")
+
+    if body.hours_used < machine.hours_used:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Las horas no pueden ser menores a las actuales ({machine.hours_used} h)",
+        )
+
+    if not _is_admin_level(current_user) and body.hours_used > machine.hours_used + MAX_HOURS_DELTA:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Podés ingresar como máximo {MAX_HOURS_DELTA} horas más que las actuales ({machine.hours_used} h). Máximo permitido: {machine.hours_used + MAX_HOURS_DELTA} h",
+        )
+
+    machine.hours_used = body.hours_used
     await db.flush()
     await db.refresh(machine)
     return machine

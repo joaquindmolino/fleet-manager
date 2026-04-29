@@ -32,6 +32,10 @@ class MachineUpdate(BaseModel):
     notes: str | None = None
 
 
+class MachineHoursUpdate(BaseModel):
+    hours_used: int
+
+
 class MachineResponse(MachineBase):
     id: uuid.UUID
     tenant_id: uuid.UUID
