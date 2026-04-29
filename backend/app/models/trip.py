@@ -40,8 +40,12 @@ class Trip(Base, TimestampMixin):
     end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(50), default=EstadoViaje.PLANIFICADO, nullable=False, index=True)
     notes: Mapped[str | None] = mapped_column(Text)
-    delivery_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    associated_document: Mapped[str | None] = mapped_column(String(100), nullable=True)
     stops_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    client_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     vehicle: Mapped["Vehicle"] = relationship(back_populates="trips")  # noqa: F821
     driver: Mapped["Driver | None"] = relationship(back_populates="trips")  # noqa: F821
+    client: Mapped["Client | None"] = relationship(back_populates="trips")  # noqa: F821

@@ -84,7 +84,11 @@ export default function DashboardPage() {
 
   const { data: myDriver } = useQuery({
     queryKey: ['drivers', 'me'],
-    queryFn: () => api.get<MyDriver>('/drivers/me').then(r => r.data),
+    queryFn: () =>
+      api.get<MyDriver>('/drivers/me').then(r => r.data).catch((err: { response?: { status?: number } }) => {
+        if (err?.response?.status === 404) return null
+        throw err
+      }),
     retry: false,
   })
 

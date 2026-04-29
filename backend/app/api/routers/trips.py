@@ -14,6 +14,7 @@ from app.models.vehicle import Vehicle
 from app.models.tire import Tire
 from app.schemas.common import PaginatedResponse
 from app.schemas.trip import TripCreate, TripResponse, TripUpdate, QuickTripCreate
+from app.models.trip import EstadoViaje
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -39,14 +40,38 @@ async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSes
             detail="No tenés un vehículo asignado. Pedile al administrador que te asigne uno.",
         )
 
+    # Validar odómetro antes de crear el viaje
+    vehicle = None
+    if body.start_odometer is not None:
+        vehicle = (await db.execute(select(Vehicle).where(Vehicle.id == driver.vehicle_id))).scalar_one_or_none()
+        if vehicle and body.start_odometer < (vehicle.odometer or 0):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"El odómetro no puede ser menor al actual ({vehicle.odometer} km)",
+            )
+
+    # Verificar documento asociado duplicado
+    existing = (await db.execute(
+        select(Trip).where(
+            Trip.tenant_id == current_user.tenant_id,
+            Trip.associated_document == body.associated_document,
+        )
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ya existe un viaje con el documento '{body.associated_document}'",
+        )
+
     trip = Trip(
         tenant_id=current_user.tenant_id,
         vehicle_id=driver.vehicle_id,
         driver_id=driver.id,
+        client_id=body.client_id,
         origin="Depósito",
-        destination=f"Reparto {body.delivery_number}",
-        status="completado",
-        delivery_number=body.delivery_number,
+        destination=f"Reparto {body.associated_document}",
+        status=EstadoViaje.EN_CURSO,
+        associated_document=body.associated_document,
         stops_count=body.stops_count,
         start_odometer=body.start_odometer,
         notes=body.notes,
@@ -54,10 +79,8 @@ async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSes
     db.add(trip)
     await db.flush()
 
-    if body.start_odometer is not None:
-        vehicle = (await db.execute(select(Vehicle).where(Vehicle.id == driver.vehicle_id))).scalar_one_or_none()
-        if vehicle and body.start_odometer > (vehicle.odometer or 0):
-            vehicle.odometer = body.start_odometer
+    if body.start_odometer is not None and vehicle:
+        vehicle.odometer = body.start_odometer
 
     await db.refresh(trip)
     return trip

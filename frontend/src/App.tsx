@@ -13,6 +13,7 @@ import SuppliersPage from '@/pages/SuppliersPage'
 import WorkOrdersPage from '@/pages/WorkOrdersPage'
 import TiresPage from '@/pages/TiresPage'
 import UsersPage from '@/pages/UsersPage'
+import ClientsPage from '@/pages/ClientsPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth()
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="tires" element={<RequirePermission module="mantenimiento" action="ver"><TiresPage /></RequirePermission>} />
           <Route path="trips" element={<RequirePermission module="viajes" action="ver"><TripsPage /></RequirePermission>} />
           <Route path="suppliers" element={<RequirePermission module="proveedores" action="ver"><SuppliersPage /></RequirePermission>} />
+          <Route path="clients" element={<RequirePermission module="clientes" action="ver"><ClientsPage /></RequirePermission>} />
           <Route path="users" element={<UsersPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

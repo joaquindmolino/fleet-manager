@@ -35,5 +35,6 @@ class Tenant(Base, TimestampMixin):
     machines: Mapped[list["Machine"]] = relationship(back_populates="tenant")  # noqa: F821
     drivers: Mapped[list["Driver"]] = relationship(back_populates="tenant")  # noqa: F821
     suppliers: Mapped[list["Supplier"]] = relationship(back_populates="tenant")  # noqa: F821
+    clients: Mapped[list["Client"]] = relationship(back_populates="tenant")  # noqa: F821
     gps_configs: Mapped[list["GpsConfig"]] = relationship(back_populates="tenant")  # noqa: F821
     notifications: Mapped[list["Notification"]] = relationship(back_populates="tenant")  # noqa: F821

@@ -1,6 +1,7 @@
 """Importa todos los modelos para que Alembic los detecte al generar migraciones."""
 
 from app.models.tenant import Tenant
+from app.models.client import Client
 from app.models.user import User, Role, Permission, role_permissions
 from app.models.vehicle import Vehicle
 from app.models.machine import Machine
@@ -16,6 +17,7 @@ from app.models.notification import Notification
 
 __all__ = [
     "Tenant",
+    "Client",
     "User",
     "Role",
     "Permission",

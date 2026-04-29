@@ -131,11 +131,25 @@ export interface MaintenanceRecord {
   notes: string | null
 }
 
+export interface Client {
+  id: string
+  tenant_id: string
+  name: string
+  contact_name: string | null
+  contact_phone: string | null
+  contact_email: string | null
+  address: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Trip {
   id: string
   tenant_id: string
   vehicle_id: string
   driver_id: string | null
+  client_id: string | null
   origin: string
   destination: string
   start_odometer: number | null
@@ -144,7 +158,7 @@ export interface Trip {
   end_time: string | null
   status: 'planificado' | 'en_curso' | 'completado' | 'cancelado'
   notes: string | null
-  delivery_number: string | null
+  associated_document: string | null
   stops_count: number | null
 }
 

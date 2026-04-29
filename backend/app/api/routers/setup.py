@@ -17,7 +17,7 @@ router = APIRouter(prefix="/setup", tags=["setup"])
 
 _MODULES = [
     "vehiculos", "conductores", "maquinas",
-    "mantenimiento", "viajes", "proveedores",
+    "mantenimiento", "viajes", "proveedores", "clientes",
     "gps", "reportes", "usuarios", "configuracion",
 ]
 _ACTIONS = ["ver", "crear", "editar", "aprobar", "cerrar", "eliminar"]
@@ -30,18 +30,21 @@ _DEFAULT_ROLES: dict[str, set[tuple[str, str]]] = {
         ("maquinas", "ver"), ("maquinas", "crear"), ("maquinas", "editar"),
         ("mantenimiento", "ver"), ("mantenimiento", "crear"), ("mantenimiento", "editar"), ("mantenimiento", "cerrar"),
         ("proveedores", "ver"), ("proveedores", "crear"), ("proveedores", "editar"),
+        ("clientes", "ver"),
         ("viajes", "ver"),
         ("reportes", "ver"),
     },
     "Coordinador de viajes": {
         ("vehiculos", "ver"),
         ("conductores", "ver"),
+        ("clientes", "ver"), ("clientes", "crear"), ("clientes", "editar"),
         ("viajes", "ver"), ("viajes", "crear"), ("viajes", "editar"), ("viajes", "cerrar"),
         ("reportes", "ver"),
     },
     "Chofer": {
         ("vehiculos", "ver"),
         ("conductores", "ver"),
+        ("clientes", "ver"),
         ("viajes", "ver"),
     },
     "Operario de depósito": {

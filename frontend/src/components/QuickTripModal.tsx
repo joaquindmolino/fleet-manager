@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { X, Truck, MapPin, CheckCircle } from 'lucide-react'
 import { api } from '@/lib/api'
-import type { Driver, Trip } from '@/types'
+import { usePermissions } from '@/hooks/usePermissions'
+import type { Driver, Trip, Client, PaginatedResponse } from '@/types'
 
 interface VehicleBasic {
   id: string
@@ -19,18 +20,27 @@ interface Props {
 }
 
 interface Form {
-  delivery_number: string
+  associated_document: string
   stops_count: string
   start_odometer: string
+  client_id: string
   notes: string
 }
 
-const EMPTY: Form = { delivery_number: '', stops_count: '', start_odometer: '', notes: '' }
+const EMPTY: Form = { associated_document: '', stops_count: '', start_odometer: '', client_id: '', notes: '' }
 
 export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
   const qc = useQueryClient()
+  const { can } = usePermissions()
+  const canSeeClients = can('clientes', 'ver')
   const [form, setForm] = useState<Form>(EMPTY)
   const [done, setDone] = useState(false)
+
+  const { data: clients } = useQuery({
+    queryKey: ['clients', 'all'],
+    queryFn: () => api.get<PaginatedResponse<Client>>('/clients?page=1&size=200').then(r => r.data.items),
+    enabled: canSeeClients,
+  })
 
   const mutation = useMutation({
     mutationFn: (body: object) => api.post<Trip>('/trips/quick', body).then(r => r.data),
@@ -46,9 +56,10 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     mutation.mutate({
-      delivery_number: form.delivery_number,
+      associated_document: form.associated_document,
       stops_count: form.stops_count ? parseInt(form.stops_count) : null,
       start_odometer: form.start_odometer ? parseInt(form.start_odometer) : null,
+      client_id: form.client_id || null,
       notes: form.notes || null,
     })
   }
@@ -82,13 +93,12 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
         </div>
 
         {done ? (
-          /* Confirmación */
           <div className="px-6 pb-6 flex flex-col items-center gap-3 text-center">
             <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
               <CheckCircle size={28} className="text-green-600" />
             </div>
             <p className="font-semibold text-gray-900">¡Reparto registrado!</p>
-            <p className="text-sm text-gray-500">El reparto {form.delivery_number} fue guardado correctamente.</p>
+            <p className="text-sm text-gray-500">El documento {form.associated_document} fue guardado correctamente.</p>
             <button
               onClick={onClose}
               className="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm py-3 rounded-xl transition-colors"
@@ -99,21 +109,40 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
         ) : (
           <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-4">
 
-            {/* Nro de reparto */}
+            {/* Documento asociado */}
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
-                Nro de reparto <span className="text-red-500">*</span>
+                Documento asociado <span className="text-red-500">*</span>
               </label>
               <input
                 required
                 type="text"
-                value={form.delivery_number}
-                onChange={e => f('delivery_number', e.target.value)}
-                placeholder="Ej: 2847"
+                value={form.associated_document}
+                onChange={e => f('associated_document', e.target.value)}
+                placeholder="Remito, factura, código de cliente…"
                 className={CI}
                 autoFocus
               />
             </div>
+
+            {/* Cliente */}
+            {canSeeClients && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+                  Cliente
+                </label>
+                <select
+                  value={form.client_id}
+                  onChange={e => f('client_id', e.target.value)}
+                  className={CI + ' bg-white'}
+                >
+                  <option value="">Sin cliente</option>
+                  {clients?.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Paradas y Odómetro en fila */}
             <div className="grid grid-cols-2 gap-3">
@@ -136,7 +165,7 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
                 </label>
                 <input
                   type="number"
-                  min="0"
+                  min={vehicle.odometer || 0}
                   value={form.start_odometer}
                   onChange={e => f('start_odometer', e.target.value)}
                   placeholder={vehicle.odometer ? String(vehicle.odometer) : '0'}

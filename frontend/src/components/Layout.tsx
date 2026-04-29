@@ -5,7 +5,7 @@ import { usePermissions } from '@/hooks/usePermissions'
 import {
   Truck, Wrench, Route, Package, BarChart3,
   LogOut, User, Forklift, Users, ClipboardList, Circle, UserCog,
-  Menu, X,
+  Menu, X, Building2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -19,6 +19,7 @@ const NAV_ITEMS: { to: string; label: string; icon: React.ElementType; perm?: [s
   { to: '/tires', label: 'Neumáticos', icon: Circle, perm: ['mantenimiento', 'ver'] },
   { to: '/trips', label: 'Viajes', icon: Route, perm: ['viajes', 'ver'] },
   { to: '/suppliers', label: 'Proveedores', icon: Package, perm: ['proveedores', 'ver'] },
+  { to: '/clients', label: 'Clientes', icon: Building2, perm: ['clientes', 'ver'] },
 ]
 
 const ADMIN_ITEMS = [

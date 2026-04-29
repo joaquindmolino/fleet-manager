@@ -12,8 +12,9 @@ class TripBase(BaseModel):
     destination: str
     start_odometer: int | None = None
     notes: str | None = None
-    delivery_number: str | None = None
+    associated_document: str | None = None
     stops_count: int | None = None
+    client_id: uuid.UUID | None = None
 
 
 class TripCreate(TripBase):
@@ -24,10 +25,11 @@ class TripCreate(TripBase):
 
 class QuickTripCreate(BaseModel):
     """Carga rápida de reparto: el sistema auto-detecta chofer y vehículo."""
-    delivery_number: str
+    associated_document: str
     stops_count: int | None = None
     start_odometer: int | None = None
     notes: str | None = None
+    client_id: uuid.UUID | None = None
 
 
 class TripUpdate(BaseModel):
