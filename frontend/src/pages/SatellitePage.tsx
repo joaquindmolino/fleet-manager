@@ -158,8 +158,7 @@ export default function SatellitePage() {
           <Map
             center={center}
             zoom={withCoords.length > 0 ? 11 : 10}
-            height={undefined}
-            style={{ width: '100%', height: '100%' }}
+            containerStyle={{ width: '100%', height: '100%' }}
             attribution={false}
           >
             {withCoords.map(pos => (
