@@ -25,13 +25,18 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
+    // Endpoints que pueden devolver 404 de forma esperada — no mostrar error global
+    const url = error.config?.url ?? ''
+    if (status === 404 && url.includes('/drivers/me')) {
+      return Promise.reject(error)
+    }
+
     const rawDetail = error.response?.data?.detail
     const detail = Array.isArray(rawDetail)
       ? rawDetail.map((d: { msg?: string }) => d.msg ?? JSON.stringify(d)).join(' · ')
       : rawDetail ?? error.message ?? 'Error desconocido'
 
     const method = (error.config?.method ?? '').toUpperCase()
-    const url = error.config?.url ?? ''
 
     errorBus.emit({ status, detail, endpoint: `${method} ${url}` })
 
