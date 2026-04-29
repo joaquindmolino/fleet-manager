@@ -14,17 +14,19 @@ const EMPTY: UF = { full_name: '', email: '', password: '', role_id: '' }
 interface PasswordForm { password: string; confirm: string }
 
 const MODULES = [
-  { key: 'vehiculos',     label: 'Vehículos' },
-  { key: 'conductores',   label: 'Conductores' },
-  { key: 'maquinas',      label: 'Máquinas' },
-  { key: 'mantenimiento', label: 'Mantenimiento' },
-  { key: 'viajes',        label: 'Viajes' },
-  { key: 'proveedores',   label: 'Proveedores' },
-  { key: 'clientes',      label: 'Clientes' },
-  { key: 'gps',           label: 'Satelital' },
-  { key: 'reportes',      label: 'Reportes' },
-  { key: 'usuarios',      label: 'Usuarios' },
-  { key: 'configuracion', label: 'Configuración' },
+  { key: 'vehiculos',       label: 'Vehículos',          sub: false },
+  { key: 'conductores',     label: 'Conductores',         sub: false },
+  { key: 'maquinas',        label: 'Máquinas',            sub: false },
+  { key: 'mantenimiento',   label: 'Mantenimiento',       sub: false },
+  { key: 'ordenes_trabajo', label: 'Órdenes de trabajo',  sub: true  },
+  { key: 'neumaticos',      label: 'Neumáticos',          sub: true  },
+  { key: 'viajes',          label: 'Viajes',              sub: false },
+  { key: 'proveedores',     label: 'Proveedores',         sub: false },
+  { key: 'clientes',        label: 'Clientes',            sub: false },
+  { key: 'gps',             label: 'Satelital',           sub: false },
+  { key: 'reportes',        label: 'Reportes',            sub: false },
+  { key: 'usuarios',        label: 'Usuarios',            sub: false },
+  { key: 'configuracion',   label: 'Configuración',       sub: false },
 ]
 const ACTIONS = [
   { key: 'ver', label: 'Ver' },
@@ -140,7 +142,15 @@ function PermissionEditor({ targetUser, onClose }: PermEditorProps) {
             <tbody>
               {MODULES.map(mod => (
                 <tr key={mod.key} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="px-4 py-2.5 font-medium text-gray-700">{mod.label}</td>
+                  <td className="px-4 py-2.5">
+                    {mod.sub ? (
+                      <span className="pl-5 text-gray-500 text-xs font-normal flex items-center gap-1">
+                        <span className="text-gray-300 select-none">└</span> {mod.label}
+                      </span>
+                    ) : (
+                      <span className="font-medium text-gray-700">{mod.label}</span>
+                    )}
+                  </td>
                   {ACTIONS.map(act => {
                     const key = `${mod.key}:${act.key}`
                     const state = matrix[key]

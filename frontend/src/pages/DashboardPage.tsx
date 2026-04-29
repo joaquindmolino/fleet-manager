@@ -137,7 +137,7 @@ export default function DashboardPage() {
           value={loadingStats ? '—' : stats?.ordenes_abiertas ?? 0}
           icon={Wrench}
           color="bg-amber-500"
-          to="/work-orders"
+          to="/maintenance"
         />
         <StatCard
           label="Viajes en curso"

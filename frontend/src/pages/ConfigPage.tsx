@@ -5,17 +5,19 @@ import { api } from '@/lib/api'
 import type { Role } from '@/types'
 
 const MODULES = [
-  { key: 'vehiculos',     label: 'Vehículos',              note: '' },
-  { key: 'conductores',   label: 'Conductores',             note: '' },
-  { key: 'maquinas',      label: 'Máquinas',                note: '' },
-  { key: 'mantenimiento', label: 'Mantenimiento',           note: 'incluye Órdenes de trabajo y Neumáticos' },
-  { key: 'viajes',        label: 'Viajes',                  note: '' },
-  { key: 'proveedores',   label: 'Proveedores',             note: '' },
-  { key: 'clientes',      label: 'Clientes',                note: '' },
-  { key: 'gps',           label: 'Satelital',               note: '' },
-  { key: 'reportes',      label: 'Reportes',                note: '' },
-  { key: 'usuarios',      label: 'Usuarios',                note: 'solo superadmin' },
-  { key: 'configuracion', label: 'Configuración',           note: '' },
+  { key: 'vehiculos',       label: 'Vehículos',          note: '',                sub: false },
+  { key: 'conductores',     label: 'Conductores',         note: '',                sub: false },
+  { key: 'maquinas',        label: 'Máquinas',            note: '',                sub: false },
+  { key: 'mantenimiento',   label: 'Mantenimiento',       note: '',                sub: false },
+  { key: 'ordenes_trabajo', label: 'Órdenes de trabajo',  note: '',                sub: true  },
+  { key: 'neumaticos',      label: 'Neumáticos',          note: '',                sub: true  },
+  { key: 'viajes',          label: 'Viajes',              note: '',                sub: false },
+  { key: 'proveedores',     label: 'Proveedores',         note: '',                sub: false },
+  { key: 'clientes',        label: 'Clientes',            note: '',                sub: false },
+  { key: 'gps',             label: 'Satelital',           note: '',                sub: false },
+  { key: 'reportes',        label: 'Reportes',            note: '',                sub: false },
+  { key: 'usuarios',        label: 'Usuarios',            note: 'solo superadmin', sub: false },
+  { key: 'configuracion',   label: 'Configuración',       note: '',                sub: false },
 ]
 
 const ACTIONS = [
@@ -168,7 +170,13 @@ export default function ConfigPage() {
                       {MODULES.map(mod => (
                         <tr key={mod.key} className="border-b border-gray-50 hover:bg-gray-50">
                           <td className="px-4 py-2.5">
-                            <p className="font-medium text-gray-700">{mod.label}</p>
+                            {mod.sub ? (
+                              <p className="pl-5 text-gray-500 text-xs font-normal flex items-center gap-1">
+                                <span className="text-gray-300 select-none">└</span> {mod.label}
+                              </p>
+                            ) : (
+                              <p className="font-medium text-gray-700">{mod.label}</p>
+                            )}
                             {mod.note && <p className="text-xs text-gray-400 mt-0.5">{mod.note}</p>}
                           </td>
                           {ACTIONS.map(act => {

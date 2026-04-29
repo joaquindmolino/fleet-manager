@@ -4,19 +4,17 @@ import { useAuth } from '@/hooks/useAuth'
 import { usePermissions } from '@/hooks/usePermissions'
 import {
   Truck, Wrench, Route, Package, BarChart3,
-  LogOut, User, Forklift, Users, ClipboardList, Circle, UserCog,
+  LogOut, User, Forklift, Users, UserCog,
   Menu, X, Building2, Satellite, Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS: { to: string; label: string; icon: React.ElementType; perm?: [string, string] }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: BarChart3 },
-  { to: '/vehicles', label: 'Vehículos', icon: Truck, perm: ['vehiculos', 'ver'] },
   { to: '/drivers', label: 'Conductores', icon: Users, perm: ['conductores', 'ver'] },
+  { to: '/vehicles', label: 'Vehículos', icon: Truck, perm: ['vehiculos', 'ver'] },
   { to: '/machines', label: 'Máquinas', icon: Forklift, perm: ['maquinas', 'ver'] },
   { to: '/maintenance', label: 'Mantenimiento', icon: Wrench, perm: ['mantenimiento', 'ver'] },
-  { to: '/work-orders', label: 'Órdenes de trabajo', icon: ClipboardList, perm: ['mantenimiento', 'ver'] },
-  { to: '/tires', label: 'Neumáticos', icon: Circle, perm: ['mantenimiento', 'ver'] },
   { to: '/trips', label: 'Viajes', icon: Route, perm: ['viajes', 'ver'] },
   { to: '/suppliers', label: 'Proveedores', icon: Package, perm: ['proveedores', 'ver'] },
   { to: '/clients', label: 'Clientes', icon: Building2, perm: ['clientes', 'ver'] },

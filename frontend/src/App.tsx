@@ -10,8 +10,6 @@ import MachinesPage from '@/pages/MachinesPage'
 import MaintenancePage from '@/pages/MaintenancePage'
 import TripsPage from '@/pages/TripsPage'
 import SuppliersPage from '@/pages/SuppliersPage'
-import WorkOrdersPage from '@/pages/WorkOrdersPage'
-import TiresPage from '@/pages/TiresPage'
 import UsersPage from '@/pages/UsersPage'
 import ClientsPage from '@/pages/ClientsPage'
 import SatellitePage from '@/pages/SatellitePage'
@@ -52,8 +50,6 @@ export default function App() {
           <Route path="drivers" element={<RequirePermission module="conductores" action="ver"><DriversPage /></RequirePermission>} />
           <Route path="machines" element={<RequirePermission module="maquinas" action="ver"><MachinesPage /></RequirePermission>} />
           <Route path="maintenance" element={<RequirePermission module="mantenimiento" action="ver"><MaintenancePage /></RequirePermission>} />
-          <Route path="work-orders" element={<RequirePermission module="mantenimiento" action="ver"><WorkOrdersPage /></RequirePermission>} />
-          <Route path="tires" element={<RequirePermission module="mantenimiento" action="ver"><TiresPage /></RequirePermission>} />
           <Route path="trips" element={<RequirePermission module="viajes" action="ver"><TripsPage /></RequirePermission>} />
           <Route path="suppliers" element={<RequirePermission module="proveedores" action="ver"><SuppliersPage /></RequirePermission>} />
           <Route path="clients" element={<RequirePermission module="clientes" action="ver"><ClientsPage /></RequirePermission>} />
