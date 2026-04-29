@@ -9,12 +9,13 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker, require_superadmin
 from app.core.security import hash_password
-from app.models.user import User, Role, UserPermission
+from app.models.user import User, Role, UserPermission, Permission
 from app.schemas.common import PaginatedResponse
 from app.schemas.user import (
     UserCreate, UserResponse, UserUpdate, UserPasswordChange,
     RoleResponse, UserPickerResponse,
     UserPermissionOverrideResponse, UserPermissionsUpdate,
+    RolePermissionsUpdate,
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -52,6 +53,49 @@ async def list_roles(current_user: CurrentUser, db: DbSession) -> list[Role]:
         .order_by(Role.name)
     )
     return list(result.scalars().all())
+
+
+@router.patch(
+    "/roles/{role_id}/permissions",
+    response_model=RoleResponse,
+    dependencies=[Depends(make_permission_checker("configuracion", "editar"))],
+)
+async def update_role_permissions(
+    role_id: uuid.UUID,
+    body: RolePermissionsUpdate,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> Role:
+    """Reemplaza los permisos base de un rol. No afecta overrides individuales de usuarios."""
+    result = await db.execute(
+        select(Role)
+        .where(Role.id == role_id, Role.tenant_id == current_user.tenant_id)
+        .options(selectinload(Role.permissions))
+    )
+    role = result.scalar_one_or_none()
+    if role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rol no encontrado")
+
+    new_perms: list[Permission] = []
+    for item in body.permissions:
+        perm_result = await db.execute(
+            select(Permission).where(Permission.module == item.module, Permission.action == item.action)
+        )
+        perm = perm_result.scalar_one_or_none()
+        if perm is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Permiso no encontrado: {item.module}:{item.action}",
+            )
+        new_perms.append(perm)
+
+    role.permissions = new_perms
+    await db.flush()
+
+    result2 = await db.execute(
+        select(Role).where(Role.id == role_id).options(selectinload(Role.permissions))
+    )
+    return result2.scalar_one()
 
 
 @router.get("", response_model=PaginatedResponse[UserResponse], dependencies=[_can_ver])

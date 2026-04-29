@@ -5,7 +5,7 @@ import { usePermissions } from '@/hooks/usePermissions'
 import {
   Truck, Wrench, Route, Package, BarChart3,
   LogOut, User, Forklift, Users, ClipboardList, Circle, UserCog,
-  Menu, X, Building2, Satellite,
+  Menu, X, Building2, Satellite, Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -25,6 +25,7 @@ const NAV_ITEMS: { to: string; label: string; icon: React.ElementType; perm?: [s
 
 const ADMIN_ITEMS = [
   { to: '/users', label: 'Usuarios', icon: UserCog },
+  { to: '/config', label: 'Configuración', icon: Settings },
 ]
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {

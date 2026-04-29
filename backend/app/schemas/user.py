@@ -77,6 +77,15 @@ class UserPermissionsUpdate(BaseModel):
     overrides: list[UserPermissionOverrideSet]
 
 
+class RolePermissionItem(BaseModel):
+    module: str
+    action: str
+
+
+class RolePermissionsUpdate(BaseModel):
+    permissions: list[RolePermissionItem]
+
+
 class UserPickerResponse(BaseModel):
     id: uuid.UUID
     full_name: str

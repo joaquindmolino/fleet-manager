@@ -19,6 +19,7 @@ const MODULES = [
   { key: 'maquinas', label: 'Máquinas' },
   { key: 'mantenimiento', label: 'Mantenimiento' },
   { key: 'viajes', label: 'Viajes' },
+  { key: 'clientes', label: 'Clientes' },
   { key: 'proveedores', label: 'Proveedores' },
   { key: 'gps', label: 'GPS' },
   { key: 'reportes', label: 'Reportes' },
