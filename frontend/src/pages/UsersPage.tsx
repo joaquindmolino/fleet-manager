@@ -14,16 +14,16 @@ const EMPTY: UF = { full_name: '', email: '', password: '', role_id: '' }
 interface PasswordForm { password: string; confirm: string }
 
 const MODULES = [
-  { key: 'vehiculos', label: 'Vehículos' },
-  { key: 'conductores', label: 'Conductores' },
-  { key: 'maquinas', label: 'Máquinas' },
+  { key: 'vehiculos',     label: 'Vehículos' },
+  { key: 'conductores',   label: 'Conductores' },
+  { key: 'maquinas',      label: 'Máquinas' },
   { key: 'mantenimiento', label: 'Mantenimiento' },
-  { key: 'viajes', label: 'Viajes' },
-  { key: 'clientes', label: 'Clientes' },
-  { key: 'proveedores', label: 'Proveedores' },
-  { key: 'gps', label: 'GPS' },
-  { key: 'reportes', label: 'Reportes' },
-  { key: 'usuarios', label: 'Usuarios' },
+  { key: 'viajes',        label: 'Viajes' },
+  { key: 'proveedores',   label: 'Proveedores' },
+  { key: 'clientes',      label: 'Clientes' },
+  { key: 'gps',           label: 'Satelital' },
+  { key: 'reportes',      label: 'Reportes' },
+  { key: 'usuarios',      label: 'Usuarios' },
   { key: 'configuracion', label: 'Configuración' },
 ]
 const ACTIONS = [
