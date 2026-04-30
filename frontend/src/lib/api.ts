@@ -27,7 +27,8 @@ api.interceptors.response.use(
 
     // Endpoints que pueden devolver 404 de forma esperada — no mostrar error global
     const url = error.config?.url ?? ''
-    if (status === 404 && url.includes('/drivers/me')) {
+    const silent404 = ['/drivers/me', '/trips/active', '/trips/pending']
+    if (status === 404 && silent404.some(p => url.includes(p))) {
       return Promise.reject(error)
     }
 
