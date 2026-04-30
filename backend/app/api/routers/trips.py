@@ -70,12 +70,11 @@ async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSes
         client_id=body.client_id,
         origin="Depósito",
         destination=f"Reparto {body.associated_document}",
-        status=EstadoViaje.EN_CURSO,
+        status=EstadoViaje.PENDIENTE,
         associated_document=body.associated_document,
         stops_count=body.stops_count,
         start_odometer=body.start_odometer,
         notes=body.notes,
-        start_time=datetime.now(timezone.utc),
     )
     db.add(trip)
     await db.flush()
@@ -85,6 +84,24 @@ async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSes
 
     await db.refresh(trip)
     return trip
+
+
+@router.get("/pending", response_model=list[TripResponse])
+async def get_pending_trips(current_user: CurrentUser, db: DbSession) -> list[Trip]:
+    """Lista los viajes pendientes asignados al conductor autenticado."""
+    driver = (await db.execute(
+        select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if driver is None:
+        return []
+    trips = (await db.execute(
+        select(Trip).where(
+            Trip.driver_id == driver.id,
+            Trip.tenant_id == current_user.tenant_id,
+            Trip.status == EstadoViaje.PENDIENTE,
+        ).order_by(Trip.created_at.desc())
+    )).scalars().all()
+    return list(trips)
 
 
 @router.get("/active", response_model=TripResponse)
@@ -182,6 +199,32 @@ async def update_trip(
             for tire in tires_result.scalars().all():
                 tire.current_km += km_driven
 
+    await db.flush()
+    await db.refresh(trip)
+    return trip
+
+
+@router.post("/{trip_id}/start", response_model=TripResponse)
+async def start_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> Trip:
+    """Inicia un viaje pendiente: lo pasa a en_curso y registra el start_time."""
+    driver = (await db.execute(
+        select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if driver is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No tenés perfil de conductor.")
+    trip = (await db.execute(
+        select(Trip).where(
+            Trip.id == trip_id,
+            Trip.tenant_id == current_user.tenant_id,
+            Trip.driver_id == driver.id,
+        )
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+    if trip.status != EstadoViaje.PENDIENTE:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El viaje no está en estado pendiente.")
+    trip.status = EstadoViaje.EN_CURSO
+    trip.start_time = datetime.now(timezone.utc)
     await db.flush()
     await db.refresh(trip)
     return trip

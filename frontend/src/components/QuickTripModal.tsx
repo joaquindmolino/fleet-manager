@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { X, Truck, MapPin } from 'lucide-react'
+import { X, Truck, MapPin, CheckCircle, Play, Loader2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { Driver, Trip, Client, PaginatedResponse } from '@/types'
@@ -30,12 +30,15 @@ interface Form {
 
 const EMPTY: Form = { associated_document: '', stops_count: '', start_odometer: '', client_id: '', notes: '' }
 
+const CI = 'w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow'
+
 export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const { can } = usePermissions()
   const canSeeClients = can('clientes', 'ver')
   const [form, setForm] = useState<Form>(EMPTY)
+  const [createdTrip, setCreatedTrip] = useState<Trip | null>(null)
 
   const { data: clients } = useQuery({
     queryKey: ['clients', 'all'],
@@ -43,11 +46,20 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
     enabled: canSeeClients,
   })
 
-  const mutation = useMutation({
+  const createMutation = useMutation({
     mutationFn: (body: object) => api.post<Trip>('/trips/quick', body).then(r => r.data),
-    onSuccess: () => {
+    onSuccess: (trip) => {
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['stats'] })
+      setCreatedTrip(trip)
+    },
+  })
+
+  const startMutation = useMutation({
+    mutationFn: (tripId: string) => api.post<Trip>(`/trips/${tripId}/start`, {}).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trips', 'active'] })
+      qc.invalidateQueries({ queryKey: ['trips', 'pending'] })
       navigate('/delivery')
     },
   })
@@ -56,7 +68,7 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    mutation.mutate({
+    createMutation.mutate({
       associated_document: form.associated_document,
       stops_count: form.stops_count ? parseInt(form.stops_count) : null,
       start_odometer: form.start_odometer ? parseInt(form.start_odometer) : null,
@@ -64,8 +76,6 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
       notes: form.notes || null,
     })
   }
-
-  const CI = 'w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
@@ -93,9 +103,40 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-4">
-
-            {/* Documento asociado */}
+        {createdTrip ? (
+          /* Pantalla de confirmación */
+          <div className="px-6 pb-6 space-y-3">
+            <div className="flex flex-col items-center gap-2 text-center py-2">
+              <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                <CheckCircle size={24} className="text-green-600" />
+              </div>
+              <p className="font-semibold text-gray-900">Reparto creado</p>
+              <p className="text-sm text-gray-500">{createdTrip.associated_document}</p>
+              {createdTrip.stops_count && (
+                <p className="text-xs text-gray-400">{createdTrip.stops_count} paradas planificadas</p>
+              )}
+            </div>
+            <button
+              onClick={() => startMutation.mutate(createdTrip.id)}
+              disabled={startMutation.isPending}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold rounded-xl py-3 text-sm flex items-center justify-center gap-2 transition-colors"
+            >
+              {startMutation.isPending
+                ? <Loader2 size={16} className="animate-spin" />
+                : <Play size={16} />
+              }
+              {startMutation.isPending ? 'Iniciando...' : 'Iniciar reparto ahora'}
+            </button>
+            <button
+              onClick={onClose}
+              className="w-full border border-gray-200 rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              Iniciar más tarde
+            </button>
+          </div>
+        ) : (
+          /* Formulario de creación */
+          <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-4">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
                 Documento asociado <span className="text-red-500">*</span>
@@ -111,7 +152,6 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
               />
             </div>
 
-            {/* Cliente */}
             {canSeeClients && (
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
@@ -130,7 +170,6 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
               </div>
             )}
 
-            {/* Paradas y Odómetro en fila */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
@@ -160,7 +199,6 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
               </div>
             </div>
 
-            {/* Observaciones */}
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
                 Observaciones
@@ -174,13 +212,12 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
               />
             </div>
 
-            {mutation.isError && (
+            {createMutation.isError && (
               <p className="text-xs text-red-600 text-center">
-                {(mutation.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al guardar. Intentá de nuevo.'}
+                {(createMutation.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al guardar. Intentá de nuevo.'}
               </p>
             )}
 
-            {/* Botones */}
             <div className="flex gap-3 pt-1">
               <button
                 type="button"
@@ -191,18 +228,18 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
               </button>
               <button
                 type="submit"
-                disabled={mutation.isPending}
+                disabled={createMutation.isPending}
                 className="flex-1 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-xl py-3 transition-colors flex items-center justify-center gap-2"
               >
-                {mutation.isPending ? (
-                  <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <MapPin size={15} />
-                )}
-                {mutation.isPending ? 'Guardando...' : 'Registrar'}
+                {createMutation.isPending
+                  ? <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  : <MapPin size={15} />
+                }
+                {createMutation.isPending ? 'Guardando...' : 'Registrar'}
               </button>
             </div>
           </form>
+        )}
       </div>
     </div>
   )

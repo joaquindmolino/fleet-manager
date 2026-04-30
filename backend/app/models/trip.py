@@ -11,6 +11,7 @@ from app.core.database import Base, TimestampMixin
 
 
 class EstadoViaje(str, Enum):
+    PENDIENTE = "pendiente"
     PLANIFICADO = "planificado"
     EN_CURSO = "en_curso"
     COMPLETADO = "completado"

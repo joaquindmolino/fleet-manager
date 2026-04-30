@@ -156,7 +156,7 @@ export interface Trip {
   end_odometer: number | null
   start_time: string | null
   end_time: string | null
-  status: 'planificado' | 'en_curso' | 'completado' | 'cancelado'
+  status: 'pendiente' | 'planificado' | 'en_curso' | 'completado' | 'cancelado'
   notes: string | null
   associated_document: string | null
   stops_count: number | null
