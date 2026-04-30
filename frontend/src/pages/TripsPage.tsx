@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { Plus, Route, Play, Loader2 } from 'lucide-react'
+import { useNavigate, Link } from 'react-router-dom'
+import { Plus, Route, Play, Loader2, ChevronRight } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -194,8 +194,12 @@ export default function TripsPage() {
                     </tr>
                   ) : (
                     <tr key={t.id} className={row}>
-                      <td className="px-3 py-3 font-medium text-gray-900">{t.origin}</td>
-                      <td className="px-3 py-3 font-medium text-gray-900">{t.destination}</td>
+                      <td className="px-3 py-3 font-medium text-gray-900">
+                        <Link to={`/trips/${t.id}`} className="hover:text-blue-600 transition-colors">{t.origin}</Link>
+                      </td>
+                      <td className="px-3 py-3 font-medium text-gray-900">
+                        <Link to={`/trips/${t.id}`} className="hover:text-blue-600 transition-colors">{t.destination}</Link>
+                      </td>
                       <td className="px-3 py-3 text-gray-700 font-mono text-xs">{v ? v.plate : '—'}</td>
                       <td className="px-3 py-3 text-gray-500">{d?.full_name ?? '—'}</td>
                       <td className="px-3 py-3 text-gray-500 text-xs">
@@ -249,9 +253,9 @@ export default function TripsPage() {
               const d = t.driver_id ? driverMap[t.driver_id] : null
               const kmDriven = t.start_odometer && t.end_odometer ? t.end_odometer - t.start_odometer : null
               return (
-                <div key={t.id} className="px-4 py-3.5 flex items-start justify-between gap-3">
-                  {/* Left side */}
-                  <div className="min-w-0 flex-1 space-y-0.5">
+                <div key={t.id} className="flex items-stretch">
+                  {/* Tappable left area */}
+                  <Link to={`/trips/${t.id}`} className="flex-1 min-w-0 px-4 py-3.5 space-y-0.5">
                     <p className="font-semibold text-gray-900 truncate">
                       {t.associated_document ?? t.destination}
                     </p>
@@ -270,9 +274,9 @@ export default function TripsPage() {
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[t.status] ?? 'bg-gray-100 text-gray-500'}`}>
                       {STATUS_LABEL[t.status] ?? t.status}
                     </span>
-                  </div>
-                  {/* Right side */}
-                  <div className="shrink-0 flex flex-col gap-1.5 items-end">
+                  </Link>
+                  {/* Right side actions */}
+                  <div className="shrink-0 flex flex-col gap-1.5 items-end justify-center px-3 py-3.5">
                     {t.status === 'pendiente' && (
                       <button
                         onClick={() => { setStartingId(t.id); startMutation.mutate(t.id) }}
@@ -293,6 +297,9 @@ export default function TripsPage() {
                       >
                         Completar
                       </button>
+                    )}
+                    {t.status !== 'pendiente' && t.status !== 'en_curso' && (
+                      <ChevronRight size={16} className="text-gray-300" />
                     )}
                   </div>
                 </div>

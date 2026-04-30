@@ -16,6 +16,7 @@ import ClientsPage from '@/pages/ClientsPage'
 import SatellitePage from '@/pages/SatellitePage'
 import GpsConfigPage from '@/pages/GpsConfigPage'
 import ConfigPage from '@/pages/ConfigPage'
+import TripDetailPage from '@/pages/TripDetailPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth()
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="maintenance" element={<RequirePermission module="mantenimiento" action="ver"><MaintenancePage /></RequirePermission>} />
           <Route path="delivery" element={<DeliveryModePage />} />
           <Route path="trips" element={<RequirePermission module="viajes" action="ver"><TripsPage /></RequirePermission>} />
+          <Route path="trips/:id" element={<RequirePermission module="viajes" action="ver"><TripDetailPage /></RequirePermission>} />
           <Route path="suppliers" element={<RequirePermission module="proveedores" action="ver"><SuppliersPage /></RequirePermission>} />
           <Route path="clients" element={<RequirePermission module="clientes" action="ver"><ClientsPage /></RequirePermission>} />
           <Route path="satellite" element={<RequirePermission module="gps" action="ver"><SatellitePage /></RequirePermission>} />

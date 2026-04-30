@@ -35,6 +35,10 @@ class QuickTripCreate(BaseModel):
 class TripUpdate(BaseModel):
     origin: str | None = None
     destination: str | None = None
+    associated_document: str | None = None
+    stops_count: int | None = None
+    start_odometer: int | None = None
+    client_id: uuid.UUID | None = None
     end_odometer: int | None = None
     end_time: datetime | None = None
     status: EstadoViaje | None = None
