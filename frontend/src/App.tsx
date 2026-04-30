@@ -8,6 +8,7 @@ import VehiclesPage from '@/pages/VehiclesPage'
 import DriversPage from '@/pages/DriversPage'
 import MachinesPage from '@/pages/MachinesPage'
 import MaintenancePage from '@/pages/MaintenancePage'
+import DeliveryModePage from '@/pages/DeliveryModePage'
 import TripsPage from '@/pages/TripsPage'
 import SuppliersPage from '@/pages/SuppliersPage'
 import UsersPage from '@/pages/UsersPage'
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="drivers" element={<RequirePermission module="conductores" action="ver"><DriversPage /></RequirePermission>} />
           <Route path="machines" element={<RequirePermission module="maquinas" action="ver"><MachinesPage /></RequirePermission>} />
           <Route path="maintenance" element={<RequirePermission module="mantenimiento" action="ver"><MaintenancePage /></RequirePermission>} />
+          <Route path="delivery" element={<DeliveryModePage />} />
           <Route path="trips" element={<RequirePermission module="viajes" action="ver"><TripsPage /></RequirePermission>} />
           <Route path="suppliers" element={<RequirePermission module="proveedores" action="ver"><SuppliersPage /></RequirePermission>} />
           <Route path="clients" element={<RequirePermission module="clientes" action="ver"><ClientsPage /></RequirePermission>} />

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { X, Truck, MapPin, CheckCircle } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { X, Truck, MapPin } from 'lucide-react'
 import { api } from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { Driver, Trip, Client, PaginatedResponse } from '@/types'
@@ -31,10 +32,10 @@ const EMPTY: Form = { associated_document: '', stops_count: '', start_odometer: 
 
 export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const { can } = usePermissions()
   const canSeeClients = can('clientes', 'ver')
   const [form, setForm] = useState<Form>(EMPTY)
-  const [done, setDone] = useState(false)
 
   const { data: clients } = useQuery({
     queryKey: ['clients', 'all'],
@@ -47,7 +48,7 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['stats'] })
-      setDone(true)
+      navigate('/delivery')
     },
   })
 
@@ -92,22 +93,7 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
           </div>
         </div>
 
-        {done ? (
-          <div className="px-6 pb-6 flex flex-col items-center gap-3 text-center">
-            <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
-              <CheckCircle size={28} className="text-green-600" />
-            </div>
-            <p className="font-semibold text-gray-900">¡Reparto registrado!</p>
-            <p className="text-sm text-gray-500">El documento {form.associated_document} fue guardado correctamente.</p>
-            <button
-              onClick={onClose}
-              className="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm py-3 rounded-xl transition-colors"
-            >
-              Cerrar
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-4">
+        <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-4">
 
             {/* Documento asociado */}
             <div>
@@ -217,7 +203,6 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
               </button>
             </div>
           </form>
-        )}
       </div>
     </div>
   )

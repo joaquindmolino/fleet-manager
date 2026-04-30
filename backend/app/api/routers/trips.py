@@ -9,11 +9,11 @@ from sqlalchemy import select, func
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
 from app.models.driver import Driver
-from app.models.trip import Trip
+from app.models.trip import Trip, TripStop
 from app.models.vehicle import Vehicle
 from app.models.tire import Tire
 from app.schemas.common import PaginatedResponse
-from app.schemas.trip import TripCreate, TripResponse, TripUpdate, QuickTripCreate
+from app.schemas.trip import TripCreate, TripResponse, TripUpdate, QuickTripCreate, TripStopCreate, TripStopResponse
 from app.models.trip import EstadoViaje
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -75,6 +75,7 @@ async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSes
         stops_count=body.stops_count,
         start_odometer=body.start_odometer,
         notes=body.notes,
+        start_time=datetime.now(timezone.utc),
     )
     db.add(trip)
     await db.flush()
@@ -83,6 +84,26 @@ async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSes
         vehicle.odometer = body.start_odometer
 
     await db.refresh(trip)
+    return trip
+
+
+@router.get("/active", response_model=TripResponse)
+async def get_active_trip(current_user: CurrentUser, db: DbSession) -> Trip:
+    """Obtiene el viaje en curso del conductor autenticado."""
+    driver = (await db.execute(
+        select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if driver is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No tenés perfil de conductor.")
+    trip = (await db.execute(
+        select(Trip).where(
+            Trip.driver_id == driver.id,
+            Trip.tenant_id == current_user.tenant_id,
+            Trip.status == EstadoViaje.EN_CURSO,
+        ).order_by(Trip.created_at.desc())
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No tenés un viaje activo.")
     return trip
 
 
@@ -145,7 +166,10 @@ async def update_trip(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(trip, field, value)
 
-    # Al completar el viaje: actualiza odómetro del vehículo y km de neumáticos
+    # Al completar el viaje: registra end_time y actualiza odómetro del vehículo y km de neumáticos
+    if body.status == EstadoViaje.COMPLETADO and not trip.end_time and "end_time" not in body.model_fields_set:
+        trip.end_time = datetime.now(timezone.utc)
+
     if body.status == "completado" and body.end_odometer and trip.start_odometer:
         km_driven = body.end_odometer - trip.start_odometer
         vehicle_result = await db.execute(select(Vehicle).where(Vehicle.id == trip.vehicle_id))
@@ -161,3 +185,51 @@ async def update_trip(
     await db.flush()
     await db.refresh(trip)
     return trip
+
+
+@router.get("/{trip_id}/stops", response_model=list[TripStopResponse], dependencies=[_can_ver])
+async def list_trip_stops(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> list[TripStop]:
+    """Lista las entregas registradas de un viaje."""
+    trip = (await db.execute(
+        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+    stops = (await db.execute(
+        select(TripStop).where(TripStop.trip_id == trip_id).order_by(TripStop.timestamp)
+    )).scalars().all()
+    return list(stops)
+
+
+@router.post("/{trip_id}/stops", response_model=TripStopResponse, status_code=status.HTTP_201_CREATED)
+async def create_trip_stop(trip_id: uuid.UUID, body: TripStopCreate, current_user: CurrentUser, db: DbSession) -> TripStop:
+    """Registra una entrega con geolocalización durante un viaje en curso."""
+    trip = (await db.execute(
+        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+    if trip.status != EstadoViaje.EN_CURSO:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El viaje no está en curso.")
+
+    stop_count = (await db.execute(
+        select(func.count()).select_from(TripStop).where(TripStop.trip_id == trip_id)
+    )).scalar_one()
+
+    is_extra = trip.stops_count is not None and stop_count >= trip.stops_count
+
+    stop = TripStop(
+        id=uuid.uuid4(),
+        tenant_id=current_user.tenant_id,
+        trip_id=trip_id,
+        lat=body.lat,
+        lng=body.lng,
+        accuracy=body.accuracy,
+        notes=body.notes,
+        timestamp=body.timestamp,
+        is_extra=is_extra,
+    )
+    db.add(stop)
+    await db.flush()
+    await db.refresh(stop)
+    return stop

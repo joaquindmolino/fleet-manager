@@ -162,6 +162,18 @@ export interface Trip {
   stops_count: number | null
 }
 
+export interface TripStop {
+  id: string
+  trip_id: string
+  lat: number
+  lng: number
+  accuracy: number | null
+  notes: string | null
+  timestamp: string
+  is_extra: boolean
+  created_at: string
+}
+
 export interface Tire {
   id: string
   tenant_id: string

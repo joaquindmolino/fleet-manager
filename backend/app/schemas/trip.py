@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.trip import EstadoViaje
 
@@ -50,5 +50,27 @@ class TripResponse(TripBase):
     start_time: datetime | None
     end_time: datetime | None
     status: EstadoViaje
+
+    model_config = {"from_attributes": True}
+
+
+class TripStopCreate(BaseModel):
+    lat: float
+    lng: float
+    accuracy: float | None = None
+    notes: str | None = Field(None, max_length=300)
+    timestamp: datetime
+
+
+class TripStopResponse(BaseModel):
+    id: uuid.UUID
+    trip_id: uuid.UUID
+    lat: float
+    lng: float
+    accuracy: float | None
+    notes: str | None
+    timestamp: datetime
+    is_extra: bool
+    created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Truck, Wrench, Route, Users, PackageCheck, Timer } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions'
 import QuickTripModal from '@/components/QuickTripModal'
 import QuickHoursModal from '@/components/QuickHoursModal'
-import type { PaginatedResponse, WorkOrder, Driver } from '@/types'
+import type { PaginatedResponse, WorkOrder, Driver, Trip } from '@/types'
 
 interface MyDriver extends Driver {
   vehicle: { id: string; plate: string; brand: string; model: string; odometer: number } | null
@@ -65,6 +65,7 @@ function StatCard({ label, value, icon: Icon, color, to }: {
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const { can } = usePermissions()
   const canSeeWorkOrders = can('mantenimiento', 'ver')
   const canUpdateHours = can('maquinas', 'editar')
@@ -95,6 +96,17 @@ export default function DashboardPage() {
     retry: false,
   })
 
+  const { data: activeTrip } = useQuery({
+    queryKey: ['trips', 'active'],
+    queryFn: () =>
+      api.get<Trip>('/trips/active').then(r => r.data).catch((err: { response?: { status?: number } }) => {
+        if (err?.response?.status === 404) return null
+        throw err
+      }),
+    enabled: !!myDriver,
+    retry: false,
+  })
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6 flex items-start justify-between gap-4">
@@ -112,7 +124,15 @@ export default function DashboardPage() {
               Actualizar horas
             </button>
           )}
-          {myDriver?.vehicle && (
+          {activeTrip ? (
+            <button
+              onClick={() => navigate('/delivery')}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors shadow-sm"
+            >
+              <PackageCheck size={18} />
+              Continuar reparto
+            </button>
+          ) : myDriver?.vehicle ? (
             <button
               onClick={() => setQuickTripOpen(true)}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors shadow-sm"
@@ -120,7 +140,7 @@ export default function DashboardPage() {
               <PackageCheck size={18} />
               Registrar reparto
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
