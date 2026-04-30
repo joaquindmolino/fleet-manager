@@ -100,7 +100,7 @@ async def get_active_trip(current_user: CurrentUser, db: DbSession) -> Trip:
             Trip.driver_id == driver.id,
             Trip.tenant_id == current_user.tenant_id,
             Trip.status == EstadoViaje.EN_CURSO,
-        ).order_by(Trip.created_at.desc())
+        ).order_by(Trip.created_at.desc()).limit(1)
     )).scalar_one_or_none()
     if trip is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No tenés un viaje activo.")
