@@ -103,14 +103,25 @@ export default function TripsPage() {
   const activeVehicles = (vehicles ?? []).filter(v => v.status !== 'baja')
   const activeDrivers = (drivers ?? []).filter(d => d.status === 'activo')
 
+  const pagination = data && data.pages > 1 && (
+    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+      <span className="text-xs text-gray-400">Página {data.page} de {data.pages}</span>
+      <div className="flex gap-2">
+        <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Anterior</button>
+        <button disabled={page === data.pages} onClick={() => setPage(p => p + 1)} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Siguiente</button>
+      </div>
+    </div>
+  )
+
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div><h1 className="text-2xl font-bold text-gray-900">Viajes</h1><p className="text-sm text-gray-500 mt-0.5">{data?.total ?? '—'} viajes registrados</p></div>
-        <button onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"><Plus size={16} /> Registrar viaje</button>
+        <button onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }} className="hidden md:flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"><Plus size={16} /> Registrar viaje</button>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Desktop table */}
+      <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? <div className="p-12 text-center text-gray-400 text-sm">Cargando...</div> : (
           <table className="w-full text-sm">
             <thead>
@@ -219,15 +230,77 @@ export default function TripsPage() {
             </tbody>
           </table>
         )}
-        {data && data.pages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-            <span className="text-xs text-gray-400">Página {data.page} de {data.pages}</span>
-            <div className="flex gap-2">
-              <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Anterior</button>
-              <button disabled={page === data.pages} onClick={() => setPage(p => p + 1)} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Siguiente</button>
-            </div>
+        {pagination}
+      </div>
+
+      {/* Mobile card list */}
+      <div className="md:hidden mt-4">
+        {isLoading ? (
+          <div className="p-12 text-center text-gray-400 text-sm">Cargando...</div>
+        ) : !data?.items.length ? (
+          <div className="p-12 text-center">
+            <Route size={32} className="text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">No hay viajes registrados.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100 bg-white rounded-xl border border-gray-200">
+            {data.items.map(t => {
+              const v = vehicleMap[t.vehicle_id]
+              const d = t.driver_id ? driverMap[t.driver_id] : null
+              const kmDriven = t.start_odometer && t.end_odometer ? t.end_odometer - t.start_odometer : null
+              return (
+                <div key={t.id} className="px-4 py-3.5 flex items-start justify-between gap-3">
+                  {/* Left side */}
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <p className="font-semibold text-gray-900 truncate">
+                      {t.associated_document ?? t.destination}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {v ? <span className="font-mono">{v.plate}</span> : null}
+                      {v && d ? ' · ' : null}
+                      {d ? d.full_name : (!v ? '—' : null)}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {kmDriven !== null
+                        ? `${kmDriven.toLocaleString('es-AR')} km`
+                        : t.start_odometer
+                          ? t.start_odometer.toLocaleString('es-AR')
+                          : '—'}
+                    </p>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[t.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                      {STATUS_LABEL[t.status] ?? t.status}
+                    </span>
+                  </div>
+                  {/* Right side */}
+                  <div className="shrink-0 flex flex-col gap-1.5 items-end">
+                    {t.status === 'pendiente' && (
+                      <button
+                        onClick={() => { setStartingId(t.id); startMutation.mutate(t.id) }}
+                        disabled={startingId === t.id}
+                        className="flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium px-2.5 py-1.5 rounded-lg transition-colors"
+                      >
+                        {startingId === t.id
+                          ? <Loader2 size={12} className="animate-spin" />
+                          : <Play size={12} />
+                        }
+                        Iniciar
+                      </button>
+                    )}
+                    {t.status === 'en_curso' && (
+                      <button
+                        onClick={() => setCompleteModal({ trip: t, end_odometer: '' })}
+                        className="text-xs text-green-600 hover:text-green-800 font-medium"
+                      >
+                        Completar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
+        {pagination}
       </div>
 
       {completeModal && (

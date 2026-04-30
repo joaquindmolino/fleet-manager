@@ -45,7 +45,6 @@ export default function VehiclesPage() {
   })
 
   const { data: drivers } = useList<Driver>('drivers', '/drivers')
-  // Map vehicle_id -> driver so we can show assigned driver per vehicle
   const vehicleDriverMap = Object.fromEntries(
     (drivers ?? []).filter(d => d.vehicle_id).map(d => [d.vehicle_id!, d])
   )
@@ -76,20 +75,35 @@ export default function VehiclesPage() {
   const editRowCls = 'border-b border-blue-200 bg-blue-50'
   const addRowCls = 'border-b border-green-200 bg-green-50'
 
+  const paginationEl = data && data.pages > 1 && (
+    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+      <span className="text-xs text-gray-400">Página {data.page} de {data.pages}</span>
+      <div className="flex gap-2">
+        <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Anterior</button>
+        <button disabled={page === data.pages} onClick={() => setPage(p => p + 1)} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Siguiente</button>
+      </div>
+    </div>
+  )
+
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Vehículos</h1>
           <p className="text-sm text-gray-500 mt-0.5">{data?.total ?? '—'} vehículos en la flota</p>
         </div>
-        <button onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-          <Plus size={16} /> Agregar vehículo
+        <button
+          onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+        >
+          <Plus size={16} />
+          <span className="hidden sm:inline">Agregar vehículo</span>
+          <span className="sm:hidden">Agregar</span>
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Desktop table */}
+      <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="p-12 text-center text-gray-400 text-sm">Cargando...</div>
         ) : (
@@ -163,9 +177,93 @@ export default function VehiclesPage() {
             </tbody>
           </table>
         )}
+        {paginationEl}
+      </div>
+
+      {/* Mobile cards */}
+      <div className="md:hidden mt-2 space-y-3">
+        {isLoading && <div className="text-center py-12 text-gray-400 text-sm">Cargando...</div>}
+
+        {addingRow && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+            <p className="text-xs font-semibold text-green-700 mb-3 uppercase tracking-wide">Nuevo vehículo</p>
+            <form onSubmit={handleAdd} className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <input required value={addForm.plate} onChange={e => af('plate', e.target.value.toUpperCase())} placeholder="Patente *" className={CI + ' font-mono'} autoFocus />
+                <select value={addForm.vehicle_type} onChange={e => af('vehicle_type', e.target.value)} className={CS}>
+                  <option value="camion">Camión</option><option value="camioneta">Camioneta</option><option value="auto">Auto</option><option value="otro">Otro</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input required value={addForm.brand} onChange={e => af('brand', e.target.value)} placeholder="Marca *" className={CI} />
+                <input required value={addForm.model} onChange={e => af('model', e.target.value)} placeholder="Modelo *" className={CI} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input type="number" value={addForm.year} onChange={e => af('year', e.target.value)} placeholder="Año" className={CI} />
+                <input type="number" min="0" value={addForm.odometer} onChange={e => af('odometer', e.target.value)} placeholder="Odómetro km" className={CI} />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="submit" disabled={isPending} className="flex-1 bg-blue-600 text-white text-sm font-medium py-2 rounded-lg disabled:opacity-50">Guardar</button>
+                <button type="button" onClick={() => setAddingRow(false)} className="flex-1 border border-gray-200 text-sm py-2 rounded-lg text-gray-600">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {data?.items.length === 0 && !addingRow && (
+          <div className="text-center py-12">
+            <Truck size={32} className="text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">No hay vehículos registrados.</p>
+          </div>
+        )}
+
+        {data?.items.map(v => {
+          const driver = vehicleDriverMap[v.id]
+          return editingId === v.id ? (
+            <div key={v.id} className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-blue-700 mb-3 uppercase tracking-wide">Editando {v.plate}</p>
+              <form onSubmit={handleEdit} className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <input required value={editForm.plate} onChange={e => ef('plate', e.target.value.toUpperCase())} className={CI + ' font-mono'} />
+                  <select value={editForm.vehicle_type} onChange={e => ef('vehicle_type', e.target.value)} className={CS}>
+                    <option value="camion">Camión</option><option value="camioneta">Camioneta</option><option value="auto">Auto</option><option value="otro">Otro</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input required value={editForm.brand} onChange={e => ef('brand', e.target.value)} className={CI} />
+                  <input required value={editForm.model} onChange={e => ef('model', e.target.value)} className={CI} />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="number" value={editForm.year} onChange={e => ef('year', e.target.value)} placeholder="Año" className={CI} />
+                  <input type="number" min="0" value={editForm.odometer} onChange={e => ef('odometer', e.target.value)} placeholder="Odómetro" className={CI} />
+                </div>
+                <select value={editForm.status} onChange={e => ef('status', e.target.value)} className={CS}>
+                  <option value="activo">Activo</option><option value="en_servicio">En servicio</option><option value="baja">Baja</option>
+                </select>
+                <div className="flex gap-2 pt-1">
+                  <button type="submit" disabled={isPending} className="flex-1 bg-blue-600 text-white text-sm font-medium py-2 rounded-lg disabled:opacity-50">Guardar</button>
+                  <button type="button" onClick={() => setEditingId(null)} className="flex-1 border border-gray-200 text-sm py-2 rounded-lg text-gray-600">Cancelar</button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div key={v.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-mono font-bold text-gray-900">{v.plate}</p>
+                <p className="text-sm text-gray-600 mt-0.5">{v.brand} {v.model}{v.year ? ` (${v.year})` : ''}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{TIPO_LABEL[v.vehicle_type]} · {v.odometer.toLocaleString('es-AR')} km</p>
+                {driver && <p className="text-xs text-gray-500 mt-0.5">{driver.full_name}</p>}
+              </div>
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[v.status]}`}>{STATUS_LABEL[v.status]}</span>
+                <button onClick={() => startEdit(v)} className="text-xs text-blue-600 font-medium">Editar</button>
+              </div>
+            </div>
+          )
+        })}
 
         {data && data.pages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+          <div className="flex items-center justify-between py-2">
             <span className="text-xs text-gray-400">Página {data.page} de {data.pages}</span>
             <div className="flex gap-2">
               <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Anterior</button>

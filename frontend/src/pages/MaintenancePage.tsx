@@ -199,7 +199,7 @@ export default function MaintenancePage() {
   )
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Mantenimiento</h1>
@@ -223,7 +223,7 @@ export default function MaintenancePage() {
       {tab === 'records' && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {loadingRecords ? <div className="p-12 text-center text-gray-400 text-sm">Cargando...</div> : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
                   {['Fecha', 'Vehículo / Máquina', 'Servicio', 'Km / Horas', 'Proveedor', 'Costo', ''].map(h => (
@@ -281,7 +281,7 @@ export default function MaintenancePage() {
                     )
                   })}
               </tbody>
-            </table>
+            </table></div>
           )}
           {records && records.pages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
@@ -299,7 +299,7 @@ export default function MaintenancePage() {
       {tab === 'services' && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {loadingServices ? <div className="p-12 text-center text-gray-400 text-sm">Cargando...</div> : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
                   {['Nombre', 'Aplica a', 'Intervalo km', 'Intervalo días', ''].map(h => (
@@ -339,7 +339,7 @@ export default function MaintenancePage() {
                     </tr>
                   ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
       )}
@@ -357,7 +357,7 @@ export default function MaintenancePage() {
           </div>
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             {loadingWo ? <div className="p-12 text-center text-gray-400 text-sm">Cargando...</div> : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
                     {['Descripción', 'Vehículo', 'Máquina', 'Prioridad', 'Estado', 'Vencimiento', ''].map(h => (
@@ -407,7 +407,7 @@ export default function MaintenancePage() {
                       )
                     })}
                 </tbody>
-              </table>
+              </table></div>
             )}
             {workOrders && workOrders.pages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
@@ -428,7 +428,7 @@ export default function MaintenancePage() {
           <div className="mb-5">
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Seleccionar vehículo</label>
             <select value={tiresVehicleId} onChange={e => { setTiresVehicleId(e.target.value); setTiresAddingRow(false); setTiresEditingId(null) }}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[280px]">
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-auto md:min-w-[280px]">
               <option value="">— Elegir vehículo —</option>
               {vehicles?.map(v => <option key={v.id} value={v.id}>{v.plate} — {v.brand} {v.model}</option>)}
             </select>
@@ -452,7 +452,7 @@ export default function MaintenancePage() {
                 <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
                   <p className="text-sm font-medium text-gray-700">{selectedVehicle?.plate} — {selectedVehicle?.brand} {selectedVehicle?.model}<span className="text-gray-400 ml-2 font-normal">{tires?.length ?? 0} neumáticos registrados</span></p>
                 </div>
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto"><table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
                       {['Posición', 'Marca', 'Modelo', 'Medida', 'N° Serie', 'Km inst.', 'Km límite', 'Progreso', 'Estado', ''].map(h => (
@@ -507,7 +507,7 @@ export default function MaintenancePage() {
                         </tr>
                       ))}
                   </tbody>
-                </table>
+                </table></div>
               </div>
             </>
           )}

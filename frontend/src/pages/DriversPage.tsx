@@ -95,20 +95,40 @@ export default function DriversPage() {
 
   const activeVehicles = (vehicles ?? []).filter(v => v.status !== 'baja')
 
-  // usuarios ya asignados a otros conductores (para filtrar del picker)
   const assignedUserIds = new Set(
     (data?.items ?? []).filter(d => d.user_id && d.id !== editingId).map(d => d.user_id!)
   )
   const availableUsers = (userPickers ?? []).filter(u => !assignedUserIds.has(u.id))
 
+  const paginationEl = data && data.pages > 1 && (
+    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+      <span className="text-xs text-gray-400">Página {data.page} de {data.pages}</span>
+      <div className="flex gap-2">
+        <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Anterior</button>
+        <button disabled={page === data.pages} onClick={() => setPage(p => p + 1)} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Siguiente</button>
+      </div>
+    </div>
+  )
+
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <div><h1 className="text-2xl font-bold text-gray-900">Conductores</h1><p className="text-sm text-gray-500 mt-0.5">{data?.total ?? '—'} conductores registrados</p></div>
-        <button onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"><Plus size={16} /> Agregar conductor</button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Conductores</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{data?.total ?? '—'} conductores registrados</p>
+        </div>
+        <button
+          onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+        >
+          <Plus size={16} />
+          <span className="hidden sm:inline">Agregar conductor</span>
+          <span className="sm:hidden">Agregar</span>
+        </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Desktop table */}
+      <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? <div className="p-12 text-center text-gray-400 text-sm">Cargando...</div> : (
           <table className="w-full text-sm">
             <thead>
@@ -186,7 +206,6 @@ export default function DriversPage() {
                       <td className="px-3 py-2">
                         <select form={`e-${d.id}`} value={editForm.user_id} onChange={e => ef('user_id', e.target.value)} className={CS}>
                           <option value="">Sin usuario</option>
-                          {/* incluir el usuario actualmente asignado aunque ya no esté en "availableUsers" */}
                           {(userPickers ?? [])
                             .filter(u2 => !assignedUserIds.has(u2.id) || u2.id === d.user_id)
                             .map(u2 => <option key={u2.id} value={u2.id}>{u2.full_name} ({u2.email})</option>)}
@@ -239,8 +258,111 @@ export default function DriversPage() {
             </tbody>
           </table>
         )}
+        {paginationEl}
+      </div>
+
+      {/* Mobile cards */}
+      <div className="md:hidden mt-2 space-y-3">
+        {isLoading && <div className="text-center py-12 text-gray-400 text-sm">Cargando...</div>}
+
+        {addingRow && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+            <p className="text-xs font-semibold text-green-700 mb-3 uppercase tracking-wide">Nuevo conductor</p>
+            <form onSubmit={e => { e.preventDefault(); createMutation.mutate(toBody(addForm, true)) }} className="space-y-2">
+              <input required value={addForm.full_name} onChange={e => af('full_name', e.target.value)} placeholder="Nombre completo *" className={CI} autoFocus />
+              <div className="grid grid-cols-2 gap-2">
+                <input value={addForm.license_number} onChange={e => af('license_number', e.target.value)} placeholder="N° Licencia" className={CI} />
+                <input type="date" value={addForm.license_expiry} onChange={e => af('license_expiry', e.target.value)} title="Venc. licencia" className={CI} />
+              </div>
+              <input value={addForm.phone} onChange={e => af('phone', e.target.value)} placeholder="Teléfono" className={CI} />
+              <select value={addForm.vehicle_id} onChange={e => af('vehicle_id', e.target.value)} className={CS}>
+                <option value="">Sin vehículo asignado</option>
+                {activeVehicles.map(v => <option key={v.id} value={v.id}>{v.plate} — {v.brand} {v.model}</option>)}
+              </select>
+              <select value={addForm.user_id} onChange={e => af('user_id', e.target.value)} className={CS}>
+                <option value="">Sin usuario de acceso</option>
+                {availableUsers.map(u => <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>)}
+              </select>
+              <div className="flex gap-2 pt-1">
+                <button type="submit" disabled={isPending} className="flex-1 bg-blue-600 text-white text-sm font-medium py-2 rounded-lg disabled:opacity-50">Guardar</button>
+                <button type="button" onClick={() => setAddingRow(false)} className="flex-1 border border-gray-200 text-sm py-2 rounded-lg text-gray-600">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {data?.items.length === 0 && !addingRow && (
+          <div className="text-center py-12">
+            <Users size={32} className="text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">No hay conductores registrados.</p>
+          </div>
+        )}
+
+        {data?.items.map(d => {
+          const v = d.vehicle_id ? vehicleMap[d.vehicle_id] : null
+          const u = d.user_id ? userMap[d.user_id] : null
+          const expiry = licenseExpiryInfo(d.license_expiry)
+          return editingId === d.id ? (
+            <div key={d.id} className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-blue-700 mb-3 uppercase tracking-wide">Editando {d.full_name}</p>
+              <form onSubmit={e => { e.preventDefault(); updateMutation.mutate({ id: d.id, body: toBody(editForm, false) }) }} className="space-y-2">
+                <input required value={editForm.full_name} onChange={e => ef('full_name', e.target.value)} className={CI} />
+                <div className="grid grid-cols-2 gap-2">
+                  <input value={editForm.license_number} onChange={e => ef('license_number', e.target.value)} placeholder="N° Licencia" className={CI} />
+                  <input type="date" value={editForm.license_expiry} onChange={e => ef('license_expiry', e.target.value)} title="Venc. licencia" className={CI} />
+                </div>
+                <input value={editForm.phone} onChange={e => ef('phone', e.target.value)} placeholder="Teléfono" className={CI} />
+                <select value={editForm.vehicle_id} onChange={e => ef('vehicle_id', e.target.value)} className={CS}>
+                  <option value="">Sin vehículo asignado</option>
+                  {activeVehicles.map(v2 => <option key={v2.id} value={v2.id}>{v2.plate} — {v2.brand} {v2.model}</option>)}
+                </select>
+                <select value={editForm.user_id} onChange={e => ef('user_id', e.target.value)} className={CS}>
+                  <option value="">Sin usuario de acceso</option>
+                  {(userPickers ?? [])
+                    .filter(u2 => !assignedUserIds.has(u2.id) || u2.id === d.user_id)
+                    .map(u2 => <option key={u2.id} value={u2.id}>{u2.full_name} ({u2.email})</option>)}
+                </select>
+                <select value={editForm.status} onChange={e => ef('status', e.target.value)} className={CS}>
+                  <option value="activo">Activo</option>
+                  <option value="inactivo">Inactivo</option>
+                  <option value="baja">Baja</option>
+                </select>
+                <div className="flex gap-2 pt-1">
+                  <button type="submit" disabled={isPending} className="flex-1 bg-blue-600 text-white text-sm font-medium py-2 rounded-lg disabled:opacity-50">Guardar</button>
+                  <button type="button" onClick={() => setEditingId(null)} className="flex-1 border border-gray-200 text-sm py-2 rounded-lg text-gray-600">Cancelar</button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div key={d.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium text-gray-900">{d.full_name}</p>
+                {d.license_number && <p className="text-xs text-gray-400 font-mono mt-0.5">{d.license_number}</p>}
+                {d.phone && <p className="text-sm text-gray-500 mt-0.5">{d.phone}</p>}
+                {expiry.warn && (
+                  <span className={`text-xs flex items-center gap-1 mt-0.5 ${expiry.color}`}>
+                    <AlertTriangle size={11} /> Venc. licencia {expiry.label}
+                  </span>
+                )}
+                {v
+                  ? <p className="text-xs text-gray-500 mt-1 font-mono">{v.plate} <span className="font-sans text-gray-400">{v.brand} {v.model}</span></p>
+                  : <p className="text-xs text-gray-300 mt-1">Sin vehículo asignado</p>}
+                {u && (
+                  <span className="inline-flex items-center gap-1 text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full font-medium mt-1">
+                    <UserCheck size={11} />{u.full_name}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[d.status]}`}>{STATUS_LABEL[d.status] ?? d.status}</span>
+                <button onClick={() => startEdit(d)} className="text-xs text-blue-600 font-medium">Editar</button>
+              </div>
+            </div>
+          )
+        })}
+
         {data && data.pages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+          <div className="flex items-center justify-between py-2">
             <span className="text-xs text-gray-400">Página {data.page} de {data.pages}</span>
             <div className="flex gap-2">
               <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Anterior</button>
