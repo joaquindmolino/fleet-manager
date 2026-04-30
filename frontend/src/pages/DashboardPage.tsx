@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Truck, Wrench, Route, Users, PackageCheck, Timer } from 'lucide-react'
+import { Truck, Wrench, Route, Users, PackageCheck, Timer, AlertTriangle, AlertCircle } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions'
 import QuickTripModal from '@/components/QuickTripModal'
 import QuickHoursModal from '@/components/QuickHoursModal'
-import type { PaginatedResponse, WorkOrder, Driver, Trip } from '@/types'
+import type { PaginatedResponse, WorkOrder, Driver, Trip, Alert } from '@/types'
 
 interface MyDriver extends Driver {
   vehicle: { id: string; plate: string; brand: string; model: string; odometer: number } | null
@@ -114,6 +114,13 @@ export default function DashboardPage() {
     retry: false,
   })
 
+  const { data: alertsData } = useQuery({
+    queryKey: ['alerts', 'me'],
+    queryFn: () => api.get<{ alerts: Alert[]; total: number }>('/alerts/me').then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
+
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
@@ -182,6 +189,39 @@ export default function DashboardPage() {
           to="/drivers"
         />
       </div>
+
+      {alertsData && alertsData.total > 0 && (
+        <div className="mb-6 bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+              <AlertTriangle size={16} className="text-amber-500" />
+              Alertas de mantenimiento
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                {alertsData.total}
+              </span>
+            </h2>
+          </div>
+          <div className="divide-y divide-gray-50 max-h-64 overflow-y-auto">
+            {alertsData.alerts.slice(0, 10).map((a, i) => (
+              <div key={i} className="px-5 py-3 flex items-start gap-3">
+                {a.severity === 'danger'
+                  ? <AlertCircle size={15} className="text-red-500 shrink-0 mt-0.5" />
+                  : <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+                }
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{a.title}</p>
+                  {a.detail && <p className="text-xs text-gray-500 mt-0.5">{a.detail}</p>}
+                </div>
+              </div>
+            ))}
+            {alertsData.total > 10 && (
+              <div className="px-5 py-2 text-xs text-gray-400">
+                ...y {alertsData.total - 10} alerta(s) más
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {quickTripOpen && myDriver && myDriver.vehicle && (
         <QuickTripModal driver={myDriver} vehicle={myDriver.vehicle} onClose={() => setQuickTripOpen(false)} />

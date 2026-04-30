@@ -4,6 +4,8 @@ import { Plus, Forklift } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { PaginatedResponse, Machine } from '@/types'
 
+interface UserPick { id: string; full_name: string; is_active: boolean }
+
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
 const CS = CI + ' bg-white'
 
@@ -19,8 +21,8 @@ const STATUS_COLOR: Record<string, string> = {
   baja: 'bg-gray-100 text-gray-500',
 }
 
-interface MF { name: string; brand: string; model: string; year: string; machine_type: string; serial_number: string; hours_used: string; status: string }
-const EMPTY: MF = { name: '', brand: '', model: '', year: '', machine_type: 'autoelevador_gasoil', serial_number: '', hours_used: '0', status: 'activo' }
+interface MF { name: string; brand: string; model: string; year: string; machine_type: string; serial_number: string; hours_used: string; status: string; assigned_user_id: string }
+const EMPTY: MF = { name: '', brand: '', model: '', year: '', machine_type: 'autoelevador_gasoil', serial_number: '', hours_used: '0', status: 'activo', assigned_user_id: '' }
 
 function toBody(f: MF, isNew: boolean) {
   const b: Record<string, unknown> = {
@@ -29,6 +31,7 @@ function toBody(f: MF, isNew: boolean) {
     machine_type: f.machine_type,
     serial_number: f.serial_number || null,
     hours_used: parseInt(f.hours_used) || 0,
+    assigned_user_id: f.assigned_user_id || null,
   }
   if (!isNew) b.status = f.status
   return b
@@ -47,6 +50,13 @@ export default function MachinesPage() {
     queryFn: () => api.get<PaginatedResponse<Machine>>(`/machines?page=${page}&size=20`).then(r => r.data),
   })
 
+  const { data: users } = useQuery({
+    queryKey: ['users-for-assignment'],
+    queryFn: () => api.get<UserPick[]>('/users/for-assignment').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const userMap = Object.fromEntries((users ?? []).map(u => [u.id, u]))
+
   const createMutation = useMutation({
     mutationFn: (body: object) => api.post('/machines', body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['machines'] }); setAddingRow(false); setAddForm(EMPTY) },
@@ -58,7 +68,7 @@ export default function MachinesPage() {
 
   function startEdit(m: Machine) {
     setAddingRow(false); setEditingId(m.id)
-    setEditForm({ name: m.name, brand: m.brand ?? '', model: m.model ?? '', year: m.year?.toString() ?? '', machine_type: m.machine_type, serial_number: m.serial_number ?? '', hours_used: m.hours_used.toString(), status: m.status })
+    setEditForm({ name: m.name, brand: m.brand ?? '', model: m.model ?? '', year: m.year?.toString() ?? '', machine_type: m.machine_type, serial_number: m.serial_number ?? '', hours_used: m.hours_used.toString(), status: m.status, assigned_user_id: m.assigned_user_id ?? '' })
   }
   function ef(k: keyof MF, v: string) { setEditForm(p => ({ ...p, [k]: v })) }
   function af(k: keyof MF, v: string) { setAddForm(p => ({ ...p, [k]: v })) }
@@ -108,7 +118,7 @@ export default function MachinesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                {['Nombre', 'Tipo', 'Marca', 'Modelo', 'Año', 'Horas', 'Estado', ''].map(h => (
+                {['Nombre', 'Tipo', 'Marca', 'Modelo', 'Año', 'Horas', 'Estado', 'Operario', ''].map(h => (
                   <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -140,7 +150,7 @@ export default function MachinesPage() {
               )}
 
               {data?.items.length === 0 && !addingRow
-                ? <tr><td colSpan={8} className="p-12 text-center"><Forklift size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay máquinas registradas.</p></td></tr>
+                ? <tr><td colSpan={9} className="p-12 text-center"><Forklift size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay máquinas registradas.</p></td></tr>
                 : data?.items.map(m => editingId === m.id ? (
                   <tr key={m.id} className={editRow}>
                     <form id={`e-${m.id}`} onSubmit={e => { e.preventDefault(); updateMutation.mutate({ id: m.id, body: toBody(editForm, false) }) }} />
@@ -169,6 +179,12 @@ export default function MachinesPage() {
                       </select>
                     </td>
                     <td className="px-3 py-2">
+                      <select form={`e-${m.id}`} value={editForm.assigned_user_id} onChange={e => ef('assigned_user_id', e.target.value)} className={CS}>
+                        <option value="">Sin operario</option>
+                        {(users ?? []).filter(u => u.is_active).map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
                       <div className="flex gap-1">
                         <button form={`e-${m.id}`} type="submit" disabled={isPending} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50">Guardar</button>
                         <button type="button" onClick={() => setEditingId(null)} className="text-xs border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Cancelar</button>
@@ -187,6 +203,7 @@ export default function MachinesPage() {
                       {m.serial_number && <p className="text-xs text-gray-400 font-mono mt-0.5">{m.serial_number}</p>}
                     </td>
                     <td className="px-3 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[m.status]}`}>{STATUS_LABEL[m.status] ?? m.status}</span></td>
+                    <td className="px-3 py-3 text-gray-500 text-xs">{m.assigned_user_id ? (userMap[m.assigned_user_id]?.full_name ?? '—') : <span className="text-gray-300">—</span>}</td>
                     <td className="px-3 py-3 text-right"><button onClick={() => startEdit(m)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button></td>
                   </tr>
                 ))
@@ -250,6 +267,10 @@ export default function MachinesPage() {
                 <option value="en_servicio">En servicio</option>
                 <option value="baja">Baja</option>
               </select>
+              <select value={editForm.assigned_user_id} onChange={e => ef('assigned_user_id', e.target.value)} className={CS}>
+                <option value="">Sin operario asignado</option>
+                {(users ?? []).filter(u => u.is_active).map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              </select>
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={isPending} className="flex-1 bg-blue-600 text-white text-sm font-medium py-2 rounded-lg disabled:opacity-50">Guardar</button>
                 <button type="button" onClick={() => setEditingId(null)} className="flex-1 border border-gray-200 text-sm py-2 rounded-lg text-gray-600">Cancelar</button>
@@ -265,6 +286,9 @@ export default function MachinesPage() {
                 <p className="text-sm text-gray-600 mt-0.5">{[m.brand, m.model].filter(Boolean).join(' ')}{m.year ? ` (${m.year})` : ''}</p>
               )}
               <p className="text-xs text-gray-400 mt-0.5">{m.hours_used.toLocaleString('es-AR')} h{m.serial_number ? ` · ${m.serial_number}` : ''}</p>
+              {m.assigned_user_id && userMap[m.assigned_user_id] && (
+                <p className="text-xs text-blue-500 mt-0.5">{userMap[m.assigned_user_id].full_name}</p>
+              )}
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[m.status]}`}>{STATUS_LABEL[m.status] ?? m.status}</span>

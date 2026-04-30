@@ -28,6 +28,7 @@ class MachineUpdate(BaseModel):
     machine_type: TipoMaquina | None = None
     status: EstadoMaquina | None = None
     hours_used: int | None = None
+    assigned_user_id: uuid.UUID | None = None
     documents: dict | None = None
     notes: str | None = None
 
@@ -41,6 +42,7 @@ class MachineResponse(MachineBase):
     tenant_id: uuid.UUID
     status: EstadoMaquina
     hours_used: int
+    assigned_user_id: uuid.UUID | None = None
     documents: dict | None = None
 
     model_config = {"from_attributes": True}

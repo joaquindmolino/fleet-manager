@@ -15,6 +15,7 @@ from app.models.work_order import WorkOrder
 from app.models.gps import GpsConfig, GpsReading
 from app.models.notification import Notification
 from app.models.coordinator import CoordinatorAssignment
+from app.models.fleet_assignment import FleetAssignment
 
 __all__ = [
     "Tenant",
@@ -37,4 +38,5 @@ __all__ = [
     "GpsReading",
     "Notification",
     "CoordinatorAssignment",
+    "FleetAssignment",
 ]

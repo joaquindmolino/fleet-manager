@@ -8,6 +8,7 @@ from sqlalchemy import select, delete
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
 from app.models.coordinator import CoordinatorAssignment
 from app.models.driver import Driver
+from app.models.machine import Machine
 from app.models.user import User
 from app.schemas.coordinator import CoordinatorAssignmentsResponse, SetCoordinatorAssignments
 
@@ -59,6 +60,19 @@ async def set_user_assignments(
     )).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
+    # Choferes y operarios no pueden ser coordinadores de equipo
+    is_driver = (await db.execute(
+        select(Driver.id).where(Driver.user_id == user_id, Driver.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none() is not None
+    is_operario = (await db.execute(
+        select(Machine.id).where(Machine.assigned_user_id == user_id, Machine.tenant_id == current_user.tenant_id).limit(1)
+    )).scalar_one_or_none() is not None
+    if is_driver or is_operario:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Los choferes y operarios no pueden liderar un equipo.",
+        )
 
     # Validar que todos los driver_ids pertenezcan al tenant
     if body.driver_ids:

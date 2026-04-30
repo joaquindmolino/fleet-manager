@@ -46,6 +46,9 @@ class UserResponse(BaseModel):
     created_at: datetime | None = None
     role: RoleResponse | None = None
     permission_overrides: list[UserPermissionOverrideResponse] = []
+    # Indica si el usuario tiene perfil de campo (chofer u operario). Calculado en el router.
+    has_driver_profile: bool = False
+    has_machine_assigned: bool = False
 
     model_config = {"from_attributes": True}
 

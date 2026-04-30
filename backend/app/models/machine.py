@@ -42,6 +42,11 @@ class Machine(Base, TimestampMixin):
     documents: Mapped[dict | None] = mapped_column(JSON)
     notes: Mapped[str | None] = mapped_column(Text)
 
+    # Operario de depósito asignado a esta máquina (opcional)
+    assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
     tenant: Mapped["Tenant"] = relationship(back_populates="machines")  # noqa: F821
     maintenance_records: Mapped[list["MaintenanceRecord"]] = relationship(back_populates="machine")  # noqa: F821
     work_orders: Mapped[list["WorkOrder"]] = relationship(back_populates="machine")  # noqa: F821

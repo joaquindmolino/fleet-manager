@@ -25,6 +25,8 @@ export interface User {
   full_name: string
   is_active: boolean
   is_superadmin: boolean
+  has_driver_profile: boolean
+  has_machine_assigned: boolean
   created_at: string
   updated_at: string
 }
@@ -56,9 +58,20 @@ export interface Machine {
   status: 'activo' | 'en_servicio' | 'baja'
   serial_number: string | null
   hours_used: number
+  assigned_user_id: string | null
   notes: string | null
   created_at: string
   updated_at: string
+}
+
+export interface Alert {
+  type: string
+  severity: 'warning' | 'danger'
+  entity_type: 'vehicle' | 'machine'
+  entity_id: string
+  entity_name: string
+  title: string
+  detail: string | null
 }
 
 export interface Driver {

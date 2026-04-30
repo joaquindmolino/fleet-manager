@@ -9,6 +9,8 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker, require_superadmin
 from app.core.security import hash_password
+from app.models.driver import Driver
+from app.models.machine import Machine
 from app.models.user import User, Role, UserPermission, Permission
 from app.schemas.common import PaginatedResponse
 from app.schemas.user import (
@@ -106,16 +108,33 @@ async def list_users(
     size: int = 20,
 ) -> PaginatedResponse[UserResponse]:
     """Lista los usuarios del tenant actual con paginación."""
+    tid = current_user.tenant_id
     offset = (page - 1) * size
     total = (await db.execute(
-        select(func.count()).select_from(User).where(User.tenant_id == current_user.tenant_id)
+        select(func.count()).select_from(User).where(User.tenant_id == tid)
     )).scalar_one()
 
     users = (await db.execute(
-        _user_query(current_user.tenant_id).offset(offset).limit(size).order_by(User.full_name)
+        _user_query(tid).offset(offset).limit(size).order_by(User.full_name)
     )).scalars().all()
 
-    return PaginatedResponse(items=users, total=total, page=page, size=size,
+    # Computar flags de perfil de campo para filtrar el botón de equipo en el frontend
+    driver_user_ids: set[uuid.UUID] = set((await db.execute(
+        select(Driver.user_id).where(Driver.tenant_id == tid, Driver.user_id.isnot(None))
+    )).scalars().all())
+    machine_user_ids: set[uuid.UUID] = set((await db.execute(
+        select(Machine.assigned_user_id).where(Machine.tenant_id == tid, Machine.assigned_user_id.isnot(None))
+    )).scalars().all())
+
+    items = [
+        UserResponse.model_validate(u).model_copy(update={
+            "has_driver_profile": u.id in driver_user_ids,
+            "has_machine_assigned": u.id in machine_user_ids,
+        })
+        for u in users
+    ]
+
+    return PaginatedResponse(items=items, total=total, page=page, size=size,
                              pages=math.ceil(total / size) if total else 1)
 
 

@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, ShieldAlert, UserCog, KeyRound, ToggleLeft, ToggleRight, Shield, Check, X, Minus, Users } from 'lucide-react'
+import { Plus, ShieldAlert, UserCog, KeyRound, ToggleLeft, ToggleRight, Shield, Check, X, Minus, Users, Truck } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
-import type { PaginatedResponse, User, Role, UserPermissionOverride, Driver } from '@/types'
+import type { PaginatedResponse, User, Role, UserPermissionOverride, Driver, Vehicle, Machine } from '@/types'
 
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
 const CS = CI + ' bg-white'
@@ -194,6 +194,112 @@ function PermissionEditor({ targetUser, onClose }: PermEditorProps) {
   )
 }
 
+interface FleetEditorProps { targetUser: User; onClose: () => void }
+
+function FleetEditor({ targetUser, onClose }: FleetEditorProps) {
+  const qc = useQueryClient()
+
+  const { data: allVehicles } = useQuery({
+    queryKey: ['vehicles-all'],
+    queryFn: () => api.get<PaginatedResponse<Vehicle>>('/vehicles?size=200').then(r => r.data.items),
+    staleTime: 60_000,
+  })
+  const { data: allMachines } = useQuery({
+    queryKey: ['machines-all'],
+    queryFn: () => api.get<PaginatedResponse<Machine>>('/machines?size=200').then(r => r.data.items),
+    staleTime: 60_000,
+  })
+  const { data: existing } = useQuery({
+    queryKey: ['fleet-assignments', targetUser.id],
+    queryFn: () => api.get<{ user_id: string; vehicle_ids: string[]; machine_ids: string[] }>(`/fleet-assignments/${targetUser.id}`).then(r => r.data),
+  })
+
+  const [selVehicles, setSelVehicles] = useState<Set<string>>(new Set())
+  const [selMachines, setSelMachines] = useState<Set<string>>(new Set())
+  const initialized = useRef(false)
+
+  if (existing && !initialized.current) {
+    initialized.current = true
+    setSelVehicles(new Set(existing.vehicle_ids))
+    setSelMachines(new Set(existing.machine_ids))
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: (body: { vehicle_ids: string[]; machine_ids: string[] }) =>
+      api.put(`/fleet-assignments/${targetUser.id}`, body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['fleet-assignments', targetUser.id] }); onClose() },
+  })
+
+  function toggleV(id: string) { setSelVehicles(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n }) }
+  function toggleM(id: string) { setSelMachines(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n }) }
+
+  const activeVehicles = (allVehicles ?? []).filter(v => v.status !== 'baja')
+  const activeMachines = (allMachines ?? []).filter(m => m.status !== 'baja')
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 py-8 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg my-auto">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-900">Flota a cargo — {targetUser.full_name}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Vehículos y máquinas bajo responsabilidad de este usuario</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+
+        <div className="p-4 max-h-[28rem] overflow-y-auto space-y-4">
+          {activeVehicles.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Vehículos</p>
+              <div className="space-y-1">
+                {activeVehicles.map(v => (
+                  <label key={v.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" checked={selVehicles.has(v.id)} onChange={() => toggleV(v.id)} className="w-4 h-4 text-blue-600 rounded border-gray-300" />
+                    <span className="text-sm font-medium text-gray-900 font-mono">{v.plate}</span>
+                    <span className="text-xs text-gray-400">{v.brand} {v.model}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+          {activeMachines.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Máquinas</p>
+              <div className="space-y-1">
+                {activeMachines.map(m => (
+                  <label key={m.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" checked={selMachines.has(m.id)} onChange={() => toggleM(m.id)} className="w-4 h-4 text-blue-600 rounded border-gray-300" />
+                    <span className="text-sm font-medium text-gray-900">{m.name}</span>
+                    {m.brand && <span className="text-xs text-gray-400">{m.brand} {m.model}</span>}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+          {activeVehicles.length === 0 && activeMachines.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-6">No hay vehículos ni máquinas activos.</p>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+          <p className="text-xs text-gray-400">{selVehicles.size} vehículo(s) · {selMachines.size} máquina(s)</p>
+          <div className="flex gap-2 shrink-0">
+            <button type="button" onClick={onClose} className="text-sm border border-gray-200 rounded-lg px-4 py-2 hover:bg-gray-50">Cancelar</button>
+            <button
+              type="button"
+              onClick={() => saveMutation.mutate({ vehicle_ids: [...selVehicles], machine_ids: [...selMachines] })}
+              disabled={saveMutation.isPending}
+              className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2"
+            >
+              {saveMutation.isPending ? 'Guardando...' : 'Guardar flota'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface TeamEditorProps { targetUser: User; onClose: () => void }
 
 function TeamEditor({ targetUser, onClose }: TeamEditorProps) {
@@ -301,6 +407,7 @@ export default function UsersPage() {
   const [passwordError, setPasswordError] = useState('')
   const [permTarget, setPermTarget] = useState<User | null>(null)
   const [teamTarget, setTeamTarget] = useState<User | null>(null)
+  const [fleetTarget, setFleetTarget] = useState<User | null>(null)
 
   const isSuperadmin = !authLoading && !!me?.is_superadmin
 
@@ -463,10 +570,16 @@ export default function UsersPage() {
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-3">
-                          {!u.is_superadmin && (
+                          {!u.is_superadmin && !u.has_driver_profile && !u.has_machine_assigned && (
                             <button onClick={() => setTeamTarget(u)} title="Gestionar equipo de conductores"
                               className="text-gray-300 hover:text-blue-500 transition-colors">
                               <Users size={15} />
+                            </button>
+                          )}
+                          {!u.is_superadmin && !u.has_driver_profile && !u.has_machine_assigned && (
+                            <button onClick={() => setFleetTarget(u)} title="Gestionar flota a cargo"
+                              className="text-gray-300 hover:text-green-500 transition-colors">
+                              <Truck size={15} />
                             </button>
                           )}
                           {!u.is_superadmin && (
@@ -539,6 +652,10 @@ export default function UsersPage() {
 
       {teamTarget && (
         <TeamEditor targetUser={teamTarget} onClose={() => setTeamTarget(null)} />
+      )}
+
+      {fleetTarget && (
+        <FleetEditor targetUser={fleetTarget} onClose={() => setFleetTarget(null)} />
       )}
     </div>
   )
