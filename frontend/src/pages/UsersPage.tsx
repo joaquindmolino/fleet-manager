@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, ShieldAlert, UserCog, KeyRound, ToggleLeft, ToggleRight, Shield, Check, X, Minus, Users, Truck } from 'lucide-react'
+import { Plus, ShieldAlert, UserCog, KeyRound, ToggleLeft, ToggleRight, Shield, Check, X, Minus, Users, Truck, Eye, EyeOff } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
@@ -405,6 +405,7 @@ export default function UsersPage() {
   const [passwordTarget, setPasswordTarget] = useState<User | null>(null)
   const [passwordForm, setPasswordForm] = useState<PasswordForm>({ password: '', confirm: '' })
   const [passwordError, setPasswordError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [permTarget, setPermTarget] = useState<User | null>(null)
   const [teamTarget, setTeamTarget] = useState<User | null>(null)
   const [fleetTarget, setFleetTarget] = useState<User | null>(null)
@@ -434,7 +435,7 @@ export default function UsersPage() {
   })
   const passwordMutation = useMutation({
     mutationFn: ({ id, password }: { id: string; password: string }) => api.patch(`/users/${id}/password`, { password }),
-    onSuccess: () => { setPasswordTarget(null); setPasswordForm({ password: '', confirm: '' }) },
+    onSuccess: () => { setPasswordTarget(null); setPasswordForm({ password: '', confirm: '' }); setShowPassword(false) },
     onError: () => setPasswordError('No se pudo cambiar la contraseña.'),
   })
 
@@ -625,13 +626,19 @@ export default function UsersPage() {
             <form onSubmit={handlePasswordSubmit} className="p-5 space-y-4">
               <p className="text-sm text-gray-600">Usuario: <span className="font-medium">{passwordTarget.full_name}</span></p>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Nueva contraseña *</label>
-                <input required type="password" value={passwordForm.password} onChange={e => setPasswordForm(p => ({ ...p, password: e.target.value }))}
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-gray-700">Nueva contraseña *</label>
+                  <button type="button" onClick={() => setShowPassword(s => !s)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                    {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                    {showPassword ? 'Ocultar' : 'Mostrar'}
+                  </button>
+                </div>
+                <input required type={showPassword ? 'text' : 'password'} value={passwordForm.password} onChange={e => setPasswordForm(p => ({ ...p, password: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Mínimo 6 caracteres" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Confirmar contraseña *</label>
-                <input required type="password" value={passwordForm.confirm} onChange={e => setPasswordForm(p => ({ ...p, confirm: e.target.value }))}
+                <input required type={showPassword ? 'text' : 'password'} value={passwordForm.confirm} onChange={e => setPasswordForm(p => ({ ...p, confirm: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Repetí la contraseña" />
               </div>
               {passwordError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{passwordError}</p>}
