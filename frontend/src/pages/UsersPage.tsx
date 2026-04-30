@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, ShieldAlert, UserCog, KeyRound, ToggleLeft, ToggleRight, Shield, Check, X, Minus } from 'lucide-react'
+import { Plus, ShieldAlert, UserCog, KeyRound, ToggleLeft, ToggleRight, Shield, Check, X, Minus, Users } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
-import type { PaginatedResponse, User, Role, UserPermissionOverride } from '@/types'
+import type { PaginatedResponse, User, Role, UserPermissionOverride, Driver } from '@/types'
 
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
 const CS = CI + ' bg-white'
@@ -194,6 +194,100 @@ function PermissionEditor({ targetUser, onClose }: PermEditorProps) {
   )
 }
 
+interface TeamEditorProps { targetUser: User; onClose: () => void }
+
+function TeamEditor({ targetUser, onClose }: TeamEditorProps) {
+  const qc = useQueryClient()
+
+  const { data: allDrivers } = useQuery({
+    queryKey: ['drivers-all'],
+    queryFn: () => api.get<PaginatedResponse<Driver>>('/drivers?size=200').then(r => r.data.items),
+    staleTime: 60_000,
+  })
+
+  const { data: existing } = useQuery({
+    queryKey: ['coordinator-assignments', targetUser.id],
+    queryFn: () => api.get<{ coordinator_user_id: string; driver_ids: string[] }>(`/coordinator-assignments/${targetUser.id}`).then(r => r.data),
+  })
+
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+
+  useEffect(() => {
+    if (existing) setSelected(new Set(existing.driver_ids))
+  }, [existing])
+
+  const saveMutation = useMutation({
+    mutationFn: (driver_ids: string[]) =>
+      api.put(`/coordinator-assignments/${targetUser.id}`, { driver_ids }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['coordinator-assignments', targetUser.id] })
+      onClose()
+    },
+  })
+
+  function toggle(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 py-8 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md my-auto">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-900">Equipo de {targetUser.full_name}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Conductores asignados a este coordinador</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+
+        <div className="p-4 max-h-96 overflow-y-auto">
+          {!allDrivers ? (
+            <p className="text-sm text-gray-400 text-center py-6">Cargando conductores...</p>
+          ) : allDrivers.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">No hay conductores registrados.</p>
+          ) : (
+            <div className="space-y-1">
+              {allDrivers.filter(d => d.status !== 'baja').map(d => (
+                <label key={d.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(d.id)}
+                    onChange={() => toggle(d.id)}
+                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">{d.full_name}</p>
+                    {d.license_number && <p className="text-xs text-gray-400 font-mono">{d.license_number}</p>}
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+          <p className="text-xs text-gray-400">{selected.size} conductor{selected.size !== 1 ? 'es' : ''} seleccionado{selected.size !== 1 ? 's' : ''}</p>
+          <div className="flex gap-2 shrink-0">
+            <button type="button" onClick={onClose} className="text-sm border border-gray-200 rounded-lg px-4 py-2 hover:bg-gray-50">Cancelar</button>
+            <button
+              type="button"
+              onClick={() => saveMutation.mutate([...selected])}
+              disabled={saveMutation.isPending}
+              className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2"
+            >
+              {saveMutation.isPending ? 'Guardando...' : 'Guardar equipo'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function UsersPage() {
   const { user: me, isLoading: authLoading } = useAuth()
   const qc = useQueryClient()
@@ -206,6 +300,7 @@ export default function UsersPage() {
   const [passwordForm, setPasswordForm] = useState<PasswordForm>({ password: '', confirm: '' })
   const [passwordError, setPasswordError] = useState('')
   const [permTarget, setPermTarget] = useState<User | null>(null)
+  const [teamTarget, setTeamTarget] = useState<User | null>(null)
 
   const isSuperadmin = !authLoading && !!me?.is_superadmin
 
@@ -369,6 +464,12 @@ export default function UsersPage() {
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-3">
                           {!u.is_superadmin && (
+                            <button onClick={() => setTeamTarget(u)} title="Gestionar equipo de conductores"
+                              className="text-gray-300 hover:text-blue-500 transition-colors">
+                              <Users size={15} />
+                            </button>
+                          )}
+                          {!u.is_superadmin && (
                             <button onClick={() => setPermTarget(u)} title="Personalizar permisos"
                               className={`transition-colors ${hasOverrides ? 'text-amber-500 hover:text-amber-700' : 'text-gray-300 hover:text-gray-500'}`}>
                               <Shield size={15} />
@@ -434,6 +535,10 @@ export default function UsersPage() {
 
       {permTarget && (
         <PermissionEditor targetUser={permTarget} roles={roles ?? []} onClose={() => setPermTarget(null)} />
+      )}
+
+      {teamTarget && (
+        <TeamEditor targetUser={teamTarget} onClose={() => setTeamTarget(null)} />
       )}
     </div>
   )

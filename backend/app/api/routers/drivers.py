@@ -8,6 +8,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
+from app.models.coordinator import CoordinatorAssignment
 from app.models.driver import Driver
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
@@ -63,16 +64,27 @@ async def list_drivers(
     page: int = 1,
     size: int = 20,
 ) -> PaginatedResponse[DriverResponse]:
-    total = (
-        await db.execute(
-            select(func.count()).select_from(Driver).where(Driver.tenant_id == current_user.tenant_id)
+    base_filter = Driver.tenant_id == current_user.tenant_id
+
+    # Si el usuario tiene asignaciones de coordinador, restringir a su equipo
+    assigned = (await db.execute(
+        select(CoordinatorAssignment.driver_id).where(
+            CoordinatorAssignment.coordinator_user_id == current_user.id,
+            CoordinatorAssignment.tenant_id == current_user.tenant_id,
         )
+    )).scalars().all()
+
+    if assigned:
+        base_filter = base_filter & Driver.id.in_(assigned)
+
+    total = (
+        await db.execute(select(func.count()).select_from(Driver).where(base_filter))
     ).scalar_one()
 
     drivers = (
         await db.execute(
             select(Driver)
-            .where(Driver.tenant_id == current_user.tenant_id)
+            .where(base_filter)
             .offset((page - 1) * size)
             .limit(size)
             .order_by(Driver.full_name)

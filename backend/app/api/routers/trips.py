@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
+from app.models.coordinator import CoordinatorAssignment
 from app.models.driver import Driver
 from app.models.trip import Trip, TripStop
 from app.models.vehicle import Vehicle
@@ -21,6 +22,32 @@ router = APIRouter(prefix="/trips", tags=["trips"])
 _can_ver = Depends(make_permission_checker("viajes", "ver"))
 _can_crear = Depends(make_permission_checker("viajes", "crear"))
 _can_editar = Depends(make_permission_checker("viajes", "editar"))
+
+
+async def _get_trip_scope(current_user, db) -> tuple[str, list[uuid.UUID]]:
+    """
+    Determina el alcance de viajes visible para el usuario:
+    - 'driver': solo sus propios viajes (si tiene perfil de conductor)
+    - 'coordinator': viajes de su equipo asignado
+    - 'all': sin restricción
+    Retorna (tipo, lista_de_driver_ids_o_vacia).
+    """
+    driver = (await db.execute(
+        select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if driver is not None:
+        return ("driver", [driver.id])
+
+    assigned = (await db.execute(
+        select(CoordinatorAssignment.driver_id).where(
+            CoordinatorAssignment.coordinator_user_id == current_user.id,
+            CoordinatorAssignment.tenant_id == current_user.tenant_id,
+        )
+    )).scalars().all()
+    if assigned:
+        return ("coordinator", list(assigned))
+
+    return ("all", [])
 
 
 @router.post("/quick", response_model=TripResponse, status_code=status.HTTP_201_CREATED)
@@ -135,6 +162,12 @@ async def list_trips(
 ) -> PaginatedResponse[TripResponse]:
     query = select(Trip).where(Trip.tenant_id == current_user.tenant_id)
     count_q = select(func.count()).select_from(Trip).where(Trip.tenant_id == current_user.tenant_id)
+
+    scope_type, scope_ids = await _get_trip_scope(current_user, db)
+    if scope_type in ("driver", "coordinator"):
+        query = query.where(Trip.driver_id.in_(scope_ids))
+        count_q = count_q.where(Trip.driver_id.in_(scope_ids))
+
     if vehicle_id:
         query = query.where(Trip.vehicle_id == vehicle_id)
         count_q = count_q.where(Trip.vehicle_id == vehicle_id)
@@ -160,10 +193,11 @@ async def create_trip(body: TripCreate, current_user: CurrentUser, db: DbSession
 
 @router.get("/{trip_id}", response_model=TripResponse, dependencies=[_can_ver])
 async def get_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> Trip:
-    result = await db.execute(
-        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == current_user.tenant_id)
-    )
-    trip = result.scalar_one_or_none()
+    query = select(Trip).where(Trip.id == trip_id, Trip.tenant_id == current_user.tenant_id)
+    scope_type, scope_ids = await _get_trip_scope(current_user, db)
+    if scope_type in ("driver", "coordinator"):
+        query = query.where(Trip.driver_id.in_(scope_ids))
+    trip = (await db.execute(query)).scalar_one_or_none()
     if trip is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado")
     return trip
