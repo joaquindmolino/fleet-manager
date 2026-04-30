@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Route } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Route, Play, Loader2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -10,9 +11,10 @@ const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none 
 const CS = CI + ' bg-white'
 
 const STATUS_LABEL: Record<string, string> = {
-  planificado: 'Planificado', en_curso: 'En curso', completado: 'Completado', cancelado: 'Cancelado',
+  pendiente: 'Pendiente', planificado: 'Planificado', en_curso: 'En curso', completado: 'Completado', cancelado: 'Cancelado',
 }
 const STATUS_COLOR: Record<string, string> = {
+  pendiente: 'bg-amber-100 text-amber-700',
   planificado: 'bg-gray-100 text-gray-600',
   en_curso: 'bg-blue-100 text-blue-700',
   completado: 'bg-green-100 text-green-700',
@@ -28,6 +30,7 @@ interface CompleteModal { trip: Trip; end_odometer: string }
 
 export default function TripsPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const { can } = usePermissions()
   const canSeeVehicles = can('vehiculos', 'ver')
   const canSeeDrivers = can('conductores', 'ver')
@@ -37,6 +40,7 @@ export default function TripsPage() {
   const [addingRow, setAddingRow] = useState(false)
   const [addForm, setAddForm] = useState<TF>(EMPTY)
   const [completeModal, setCompleteModal] = useState<CompleteModal | null>(null)
+  const [startingId, setStartingId] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['trips', page],
@@ -62,6 +66,18 @@ export default function TripsPage() {
       qc.invalidateQueries({ queryKey: ['trips'] }); qc.invalidateQueries({ queryKey: ['stats'] })
       setEditingId(null); setCompleteModal(null)
     },
+  })
+
+  const startMutation = useMutation({
+    mutationFn: (tripId: string) => api.post<Trip>(`/trips/${tripId}/start`, {}).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trips'] })
+      qc.invalidateQueries({ queryKey: ['trips', 'active'] })
+      qc.invalidateQueries({ queryKey: ['trips', 'pending'] })
+      setStartingId(null)
+      navigate('/delivery')
+    },
+    onError: () => setStartingId(null),
   })
 
   function startEdit(t: Trip) {
@@ -177,6 +193,19 @@ export default function TripsPage() {
                       <td className="px-3 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[t.status] ?? 'bg-gray-100 text-gray-500'}`}>{STATUS_LABEL[t.status] ?? t.status}</span></td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-3">
+                          {t.status === 'pendiente' && (
+                            <button
+                              onClick={() => { setStartingId(t.id); startMutation.mutate(t.id) }}
+                              disabled={startingId === t.id}
+                              className="flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium px-2.5 py-1.5 rounded-lg transition-colors"
+                            >
+                              {startingId === t.id
+                                ? <Loader2 size={12} className="animate-spin" />
+                                : <Play size={12} />
+                              }
+                              Iniciar
+                            </button>
+                          )}
                           {t.status === 'en_curso' && (
                             <button onClick={() => setCompleteModal({ trip: t, end_odometer: '' })} className="text-xs text-green-600 hover:text-green-800 font-medium">Completar</button>
                           )}
