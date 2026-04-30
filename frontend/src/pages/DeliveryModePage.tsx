@@ -122,7 +122,6 @@ export default function DeliveryModePage() {
   }
 
   const plannedCount = trip.stops_count ?? null
-  const doneCount = stops.filter(s => !s.is_extra).length
   const extraCount = stops.filter(s => s.is_extra).length
   const totalCount = stops.length
   const reachedPlanned = plannedCount !== null && totalCount >= plannedCount
