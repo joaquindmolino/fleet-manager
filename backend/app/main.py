@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.routers import auth, users, vehicles, drivers, machines, maintenance, work_orders, suppliers, trips, tires, stats, setup, clients, gps, coordinator, fleet_assignments, alerts
+from app.api.routers import auth, users, vehicles, drivers, machines, maintenance, work_orders, suppliers, trips, tires, stats, setup, clients, gps, coordinator, fleet_assignments, alerts, admin
 
 
 @asynccontextmanager
@@ -52,6 +52,7 @@ app.include_router(gps.router, prefix=API_PREFIX)
 app.include_router(coordinator.router, prefix=API_PREFIX)
 app.include_router(fleet_assignments.router, prefix=API_PREFIX)
 app.include_router(alerts.router, prefix=API_PREFIX)
+app.include_router(admin.router, prefix=API_PREFIX)
 
 
 @app.get("/health", tags=["health"])

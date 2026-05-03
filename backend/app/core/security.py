@@ -21,25 +21,32 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(subject: str | Any, expires_delta: timedelta | None = None) -> str:
+def create_access_token(
+    subject: str | Any,
+    expires_delta: timedelta | None = None,
+    tenant_id_override: str | None = None,
+) -> str:
     """
     Crea un JWT de acceso.
     subject: generalmente el user_id (string).
+    tenant_id_override: si se provee, el token opera bajo ese tenant (impersonación).
     """
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    payload = {"sub": str(subject), "exp": expire, "iat": datetime.now(timezone.utc)}
+    payload: dict[str, Any] = {"sub": str(subject), "exp": expire, "iat": datetime.now(timezone.utc)}
+    if tenant_id_override:
+        payload["tid"] = tenant_id_override
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def decode_access_token(token: str) -> str | None:
+def decode_access_token(token: str) -> tuple[str | None, str | None]:
     """
-    Decodifica un JWT y retorna el subject (user_id).
-    Retorna None si el token es inválido o expiró.
+    Decodifica un JWT y retorna (user_id, tenant_id_override).
+    Ambos None si el token es inválido o expiró.
     """
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        return payload.get("sub")
+        return payload.get("sub"), payload.get("tid")
     except JWTError:
-        return None
+        return None, None

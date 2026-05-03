@@ -29,7 +29,7 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    user_id = decode_access_token(credentials.credentials)
+    user_id, tenant_id_override = decode_access_token(credentials.credentials)
     if user_id is None:
         raise credentials_exception
 
@@ -45,6 +45,11 @@ async def get_current_user(
 
     if user is None or not user.is_active:
         raise credentials_exception
+
+    if tenant_id_override and user.is_superadmin:
+        # Desacoplar del session para que la mutación no persista
+        db.expunge(user)
+        user.tenant_id = uuid.UUID(tenant_id_override)
 
     return user
 

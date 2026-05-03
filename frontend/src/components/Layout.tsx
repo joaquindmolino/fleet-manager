@@ -5,7 +5,7 @@ import { usePermissions } from '@/hooks/usePermissions'
 import {
   Truck, Wrench, Route, Package, BarChart3,
   LogOut, User, Forklift, Users, UserCog,
-  Menu, X, Building2, Satellite, Settings,
+  Menu, X, Building2, Satellite, Settings, ShieldAlert,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -26,8 +26,12 @@ const ADMIN_ITEMS = [
   { to: '/config', label: 'Configuración', icon: Settings },
 ]
 
+const SUPERADMIN_ITEMS = [
+  { to: '/admin', label: 'Empresas', icon: ShieldAlert },
+]
+
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
-  const { user, logout } = useAuth()
+  const { user, logout, impersonating, stopImpersonating } = useAuth()
   const { can } = usePermissions()
   const navigate = useNavigate()
 
@@ -83,6 +87,24 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 {label}
               </NavLink>
             ))}
+            {!impersonating && SUPERADMIN_ITEMS.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-red-50 text-red-700'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  )
+                }
+              >
+                <Icon size={18} />
+                {label}
+              </NavLink>
+            ))}
           </>
         )}
       </nav>
@@ -111,9 +133,32 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
 export default function Layout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const { impersonating, stopImpersonating } = useAuth()
+  const navigate = useNavigate()
+
+  async function handleStopImpersonating() {
+    await stopImpersonating()
+    navigate('/admin')
+  }
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-gray-100 flex-col">
+
+      {impersonating && (
+        <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-between gap-4 shrink-0 z-30">
+          <p className="text-sm font-medium">
+            Operando como: <span className="font-bold">{impersonating.tenantName}</span>
+          </p>
+          <button
+            onClick={handleStopImpersonating}
+            className="text-xs font-semibold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg transition-colors shrink-0"
+          >
+            Volver a mi cuenta
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden">
 
       {/* Sidebar desktop */}
       <aside className="hidden md:flex w-56 bg-white border-r border-gray-200 flex-col shrink-0">
@@ -162,6 +207,8 @@ export default function Layout() {
         <main className="flex-1 overflow-y-auto">
           <Outlet />
         </main>
+      </div>
+
       </div>
     </div>
   )
