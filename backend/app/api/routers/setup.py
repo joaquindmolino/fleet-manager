@@ -154,3 +154,25 @@ async def seed_roles(
     result = await seed_tenant_roles(current_user.tenant_id, db)
     await db.commit()
     return {"ok": True, **result}
+
+
+class ResetPasswordRequest(BaseModel):
+    setup_key: str
+    email: EmailStr
+    new_password: str
+
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+async def reset_password(body: ResetPasswordRequest, db: DbSession) -> dict:
+    """Resetea la contraseña de cualquier usuario. Requiere setup_key. Solo para recuperación de acceso."""
+    if body.setup_key != settings.SECRET_KEY:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Setup key incorrecta.")
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La contraseña debe tener al menos 6 caracteres.")
+    result = await db.execute(select(User).where(User.email == body.email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+    user.hashed_password = hash_password(body.new_password)
+    await db.commit()
+    return {"ok": True, "mensaje": f"Contraseña de {body.email} actualizada correctamente."}
