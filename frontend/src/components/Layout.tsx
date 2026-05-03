@@ -43,7 +43,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const visibleItems = NAV_ITEMS.filter(item => !item.perm || can(item.perm[0], item.perm[1]))
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
         {visibleItems.map(({ to, label, icon: Icon }) => (
           <NavLink
@@ -120,10 +120,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </div>
           <button
             onClick={handleLogout}
-            title="Cerrar sesión"
-            className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
           >
-            <LogOut size={15} />
+            <LogOut size={14} />
+            Salir
           </button>
         </div>
       </div>
