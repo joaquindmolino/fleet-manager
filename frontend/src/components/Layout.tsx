@@ -31,7 +31,7 @@ const SUPERADMIN_ITEMS = [
 ]
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
-  const { user, logout, impersonating, stopImpersonating } = useAuth()
+  const { user, logout, impersonating } = useAuth()
   const { can } = usePermissions()
   const navigate = useNavigate()
 
