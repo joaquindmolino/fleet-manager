@@ -9,7 +9,7 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  login: (email: string, password: string) => Promise<void>
+  login: (tenantSlug: string, email: string, password: string) => Promise<void>
   logout: () => void
   refreshUser: () => Promise<void>
 }
@@ -40,8 +40,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { fetchUser() }, [])
 
-  async function login(email: string, password: string) {
-    const res = await api.post<{ access_token: string }>('/auth/login', { email, password })
+  async function login(tenantSlug: string, email: string, password: string) {
+    const res = await api.post<{ access_token: string }>('/auth/login', {
+      tenant_slug: tenantSlug,
+      email,
+      password,
+    })
     localStorage.setItem('access_token', res.data.access_token)
     const me = await api.get<User>('/auth/me')
     setState({ user: me.data, isLoading: false, isAuthenticated: true })

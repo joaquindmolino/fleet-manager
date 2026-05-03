@@ -3,7 +3,13 @@
 from pydantic import BaseModel, EmailStr
 
 
+class TenantCheckResponse(BaseModel):
+    name: str
+    slug: str
+
+
 class LoginRequest(BaseModel):
+    tenant_slug: str
     email: EmailStr
     password: str
 
