@@ -10,7 +10,7 @@ from app.api.dependencies import CurrentUser, DbSession, require_superadmin
 from app.api.routers.setup import seed_tenant_roles
 from app.core.security import create_access_token, hash_password
 from app.models.tenant import Tenant
-from app.models.user import User
+from app.models.user import User, Role
 from app.schemas.admin import TenantCreate, TenantResponse
 from app.schemas.auth import Token
 
@@ -59,16 +59,20 @@ async def create_tenant(
     db.add(tenant)
     await db.flush()
 
+    await seed_tenant_roles(tenant.id, db)
+
+    admin_role = (await db.execute(
+        select(Role).where(Role.tenant_id == tenant.id, Role.name == "Administrador")
+    )).scalar_one_or_none()
+
     admin = User(
         id=uuid.uuid4(), tenant_id=tenant.id,
         email=body.admin_email, full_name=body.admin_nombre,
         hashed_password=hash_password(body.admin_password),
         is_active=True, is_superadmin=False,
+        role_id=admin_role.id if admin_role else None,
     )
     db.add(admin)
-    await db.flush()
-
-    await seed_tenant_roles(tenant.id, db)
     await db.commit()
     await db.refresh(tenant)
 
