@@ -493,16 +493,11 @@ export default function UsersPage() {
             <tbody>
               {addingRow && (
                 <tr className={addRow}>
-                  <form id="add-u" onSubmit={e => {
-                    e.preventDefault()
-                    if (addForm.password.length < 6) return
-                    createMutation.mutate({ full_name: addForm.full_name, email: addForm.email, password: addForm.password, role_id: addForm.role_id || null })
-                  }} />
-                  <td className="px-3 py-2"><input form="add-u" required value={addForm.full_name} onChange={e => af('full_name', e.target.value)} placeholder="Nombre *" className={CI} /></td>
-                  <td className="px-3 py-2"><input form="add-u" required type="email" value={addForm.email} onChange={e => af('email', e.target.value)} placeholder="email@empresa.com *" className={CI} /></td>
-                  <td className="px-3 py-2"><input form="add-u" required type="password" minLength={6} value={addForm.password} onChange={e => af('password', e.target.value)} placeholder="Mínimo 6 chars *" className={CI} /></td>
+                  <td className="px-3 py-2"><input required value={addForm.full_name} onChange={e => af('full_name', e.target.value)} placeholder="Nombre *" className={CI} /></td>
+                  <td className="px-3 py-2"><input required type="email" value={addForm.email} onChange={e => af('email', e.target.value)} placeholder="email@empresa.com *" className={CI} /></td>
+                  <td className="px-3 py-2"><input required type="password" minLength={6} value={addForm.password} onChange={e => af('password', e.target.value)} placeholder="Mínimo 6 chars *" className={CI} /></td>
                   <td className="px-3 py-2">
-                    <select form="add-u" value={addForm.role_id} onChange={e => af('role_id', e.target.value)} className={CS}>
+                    <select value={addForm.role_id} onChange={e => af('role_id', e.target.value)} className={CS}>
                       <option value="">Sin rol</option>
                       {(roles ?? []).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </select>
@@ -510,7 +505,12 @@ export default function UsersPage() {
                   <td className="px-3 py-2 text-gray-400 text-xs">Activo</td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
-                      <button form="add-u" type="submit" disabled={isPending} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50">Guardar</button>
+                      <button
+                        type="button"
+                        disabled={isPending || !addForm.full_name || !addForm.email || addForm.password.length < 6}
+                        onClick={() => createMutation.mutate({ full_name: addForm.full_name, email: addForm.email, password: addForm.password, role_id: addForm.role_id || null })}
+                        className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+                      >Guardar</button>
                       <button type="button" onClick={() => setAddingRow(false)} className="text-xs border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Cancelar</button>
                     </div>
                   </td>
