@@ -77,26 +77,28 @@ async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSes
                 detail=f"El odómetro no puede ser menor al actual ({vehicle.odometer} km)",
             )
 
-    # Verificar documento asociado duplicado
-    existing = (await db.execute(
-        select(Trip).where(
-            Trip.tenant_id == current_user.tenant_id,
-            Trip.associated_document == body.associated_document,
-        )
-    )).scalar_one_or_none()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Ya existe un viaje con el documento '{body.associated_document}'",
-        )
+    # Verificar documento asociado duplicado (solo si se ingresó uno)
+    if body.associated_document:
+        existing = (await db.execute(
+            select(Trip).where(
+                Trip.tenant_id == current_user.tenant_id,
+                Trip.associated_document == body.associated_document,
+            )
+        )).scalar_one_or_none()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Ya existe un viaje con el documento '{body.associated_document}'",
+            )
 
+    destination = f"Reparto {body.associated_document}" if body.associated_document else "Reparto del día"
     trip = Trip(
         tenant_id=current_user.tenant_id,
         vehicle_id=driver.vehicle_id,
         driver_id=driver.id,
         client_id=body.client_id,
         origin="Depósito",
-        destination=f"Reparto {body.associated_document}",
+        destination=destination,
         status=EstadoViaje.PENDIENTE,
         associated_document=body.associated_document,
         stops_count=body.stops_count,

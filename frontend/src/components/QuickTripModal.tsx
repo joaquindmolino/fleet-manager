@@ -139,14 +139,13 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
           <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-4">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
-                Documento asociado <span className="text-red-500">*</span>
+                Documento asociado
               </label>
               <input
-                required
                 type="text"
                 value={form.associated_document}
                 onChange={e => f('associated_document', e.target.value)}
-                placeholder="Remito, factura, código de cliente…"
+                placeholder="Remito, factura, código… (opcional)"
                 className={CI}
                 autoFocus
               />

@@ -25,7 +25,7 @@ class TripCreate(TripBase):
 
 class QuickTripCreate(BaseModel):
     """Carga rápida de reparto: el sistema auto-detecta chofer y vehículo."""
-    associated_document: str
+    associated_document: str | None = None
     stops_count: int | None = None
     start_odometer: int | None = None
     notes: str | None = None
@@ -54,6 +54,7 @@ class TripResponse(TripBase):
     start_time: datetime | None
     end_time: datetime | None
     status: EstadoViaje
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 

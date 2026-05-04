@@ -5,7 +5,7 @@ import { Plus, Route, Play, Loader2, ChevronRight } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
-import type { PaginatedResponse, Trip, Vehicle, Driver } from '@/types'
+import type { PaginatedResponse, Trip, Vehicle, Driver, Client } from '@/types'
 
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
 const CS = CI + ' bg-white'
@@ -34,6 +34,7 @@ export default function TripsPage() {
   const { can } = usePermissions()
   const canSeeVehicles = can('vehiculos', 'ver')
   const canSeeDrivers = can('conductores', 'ver')
+  const canSeeClients = can('clientes', 'ver')
   const [page, setPage] = useState(1)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EF>({ origin: '', destination: '', end_odometer: '' })
@@ -49,9 +50,11 @@ export default function TripsPage() {
 
   const { data: vehicles } = useList<Vehicle>('vehicles', '/vehicles', 100, canSeeVehicles)
   const { data: drivers } = useList<Driver>('drivers', '/drivers', 100, canSeeDrivers)
+  const { data: clients } = useList<Client>('clients', '/clients', 200, canSeeClients)
 
   const vehicleMap = Object.fromEntries((vehicles ?? []).map(v => [v.id, v]))
   const driverMap = Object.fromEntries((drivers ?? []).map(d => [d.id, d]))
+  const clientMap = Object.fromEntries((clients ?? []).map(c => [c.id, c]))
 
   const createMutation = useMutation({
     mutationFn: (body: object) => api.post('/trips', body),
@@ -100,6 +103,11 @@ export default function TripsPage() {
     })
   }
 
+  function formatDate(t: Trip) {
+    const d = t.end_time ?? t.start_time ?? t.created_at
+    return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+  }
+
   const activeVehicles = (vehicles ?? []).filter(v => v.status !== 'baja')
   const activeDrivers = (drivers ?? []).filter(d => d.status === 'activo')
 
@@ -126,7 +134,7 @@ export default function TripsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                {['Origen', 'Destino', 'Vehículo', 'Conductor', 'Km recorridos', 'Estado', ''].map(h => (
+                {['Origen', 'Destino', 'Cliente', 'Vehículo', 'Conductor', 'Fecha', 'Estado', ''].map(h => (
                   <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -159,7 +167,9 @@ export default function TripsPage() {
                       {activeDrivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
                     </select>
                   </td>
+                  <td className="px-3 py-2 text-gray-300 text-xs">—</td>
                   <td className="px-3 py-2"><input form="add-tr" type="number" min="0" value={addForm.start_odometer} onChange={e => af('start_odometer', e.target.value)} placeholder="Km inicial" className={CI} /></td>
+                  <td className="px-3 py-2 text-gray-300 text-xs">—</td>
                   <td className="px-3 py-2 text-gray-400 text-xs">Planificado</td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
@@ -171,7 +181,7 @@ export default function TripsPage() {
               )}
 
               {data?.items.length === 0 && !addingRow
-                ? <tr><td colSpan={7} className="p-12 text-center"><Route size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay viajes registrados.</p></td></tr>
+                ? <tr><td colSpan={8} className="p-12 text-center"><Route size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay viajes registrados.</p></td></tr>
                 : data?.items.map(t => {
                   const v = vehicleMap[t.vehicle_id]
                   const d = t.driver_id ? driverMap[t.driver_id] : null
@@ -181,9 +191,10 @@ export default function TripsPage() {
                       <form id={`e-${t.id}`} onSubmit={e => { e.preventDefault(); updateMutation.mutate({ id: t.id, body: { origin: editForm.origin, destination: editForm.destination, end_odometer: editForm.end_odometer ? parseInt(editForm.end_odometer) : null } }) }} />
                       <td className="px-3 py-2"><input form={`e-${t.id}`} required value={editForm.origin} onChange={e => ef('origin', e.target.value)} className={CI} /></td>
                       <td className="px-3 py-2"><input form={`e-${t.id}`} required value={editForm.destination} onChange={e => ef('destination', e.target.value)} className={CI} /></td>
+                      <td className="px-3 py-2 text-gray-400 text-xs">{t.client_id ? (clientMap[t.client_id]?.name ?? '—') : '—'}</td>
                       <td className="px-3 py-2 text-gray-400 font-mono text-xs">{v ? v.plate : '—'}</td>
                       <td className="px-3 py-2 text-gray-400 text-xs">{d?.full_name ?? '—'}</td>
-                      <td className="px-3 py-2"><input form={`e-${t.id}`} type="number" min="0" value={editForm.end_odometer} onChange={e => ef('end_odometer', e.target.value)} placeholder="Km final" className={CI} /></td>
+                      <td className="px-3 py-2 text-gray-400 text-xs">{formatDate(t)}</td>
                       <td className="px-3 py-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[t.status] ?? 'bg-gray-100 text-gray-500'}`}>{STATUS_LABEL[t.status] ?? t.status}</span></td>
                       <td className="px-3 py-2">
                         <div className="flex gap-1">
@@ -200,11 +211,10 @@ export default function TripsPage() {
                       <td className="px-3 py-3 font-medium text-gray-900">
                         <Link to={`/trips/${t.id}`} className="hover:text-blue-600 transition-colors">{t.destination}</Link>
                       </td>
+                      <td className="px-3 py-3 text-gray-500 text-xs">{t.client_id ? (clientMap[t.client_id]?.name ?? '—') : '—'}</td>
                       <td className="px-3 py-3 text-gray-700 font-mono text-xs">{v ? v.plate : '—'}</td>
                       <td className="px-3 py-3 text-gray-500">{d?.full_name ?? '—'}</td>
-                      <td className="px-3 py-3 text-gray-500 text-xs">
-                        {kmDriven !== null ? `${kmDriven.toLocaleString('es-AR')} km` : t.start_odometer ? `Desde ${t.start_odometer.toLocaleString('es-AR')}` : '—'}
-                      </td>
+                      <td className="px-3 py-3 text-gray-500 text-xs">{formatDate(t)}</td>
                       <td className="px-3 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[t.status] ?? 'bg-gray-100 text-gray-500'}`}>{STATUS_LABEL[t.status] ?? t.status}</span></td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-3">
