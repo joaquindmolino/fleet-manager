@@ -16,15 +16,36 @@ down_revision: Union[str, None] = "h3c4d5e6f7a8"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+_TABLE = "notifications"
+
+
+def _table_exists(conn) -> bool:
+    result = conn.execute(sa.text(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = :t)"
+    ), {"t": _TABLE})
+    return result.scalar()
+
+
+def _column_exists(conn, column: str) -> bool:
+    result = conn.execute(sa.text(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = :t AND column_name = :c)"
+    ), {"t": _TABLE, "c": column})
+    return result.scalar()
+
+
+def _index_exists(conn, index: str) -> bool:
+    result = conn.execute(sa.text(
+        "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = :t AND indexname = :i)"
+    ), {"t": _TABLE, "i": index})
+    return result.scalar()
+
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-    existing_tables = inspector.get_table_names()
+    conn = op.get_bind()
 
-    if "notifications" not in existing_tables:
+    if not _table_exists(conn):
         op.create_table(
-            "notifications",
+            _TABLE,
             sa.Column("id", UUID(as_uuid=True), primary_key=True),
             sa.Column("tenant_id", UUID(as_uuid=True), sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False),
             sa.Column("user_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
@@ -39,22 +60,19 @@ def upgrade() -> None:
             sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
             sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         )
+    else:
+        if not _column_exists(conn, "link"):
+            op.add_column(_TABLE, sa.Column("link", sa.String(300), nullable=True))
 
-    # Agregar columna link si la tabla existía sin ella
-    existing_columns = {col["name"] for col in inspector.get_columns("notifications")}
-    if "link" not in existing_columns:
-        op.add_column("notifications", sa.Column("link", sa.String(300), nullable=True))
-
-    existing_indexes = {idx["name"] for idx in inspector.get_indexes("notifications")} if "notifications" in inspector.get_table_names() else set()
     for index_name, columns in [
         ("ix_notifications_tenant_id", ["tenant_id"]),
         ("ix_notifications_user_id", ["user_id"]),
         ("ix_notifications_is_read", ["is_read"]),
         ("ix_notifications_notification_type", ["notification_type"]),
     ]:
-        if index_name not in existing_indexes:
-            op.create_index(index_name, "notifications", columns)
+        if not _index_exists(conn, index_name):
+            op.create_index(index_name, _TABLE, columns)
 
 
 def downgrade() -> None:
-    op.drop_table("notifications")
+    op.drop_table(_TABLE)
