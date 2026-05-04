@@ -520,7 +520,7 @@ export default function UsersPage() {
               {data?.items.length === 0 && !addingRow
                 ? <tr><td colSpan={6} className="p-12 text-center"><UserCog size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay usuarios registrados.</p></td></tr>
                 : data?.items.map(u => {
-                  const isMe = u.id === me.id
+                  const isMe = u.id === me?.id
                   const role = u.role_id ? roleMap[u.role_id] : null
                   const hasOverrides = (u.permission_overrides?.length ?? 0) > 0
                   return editingId === u.id ? (
