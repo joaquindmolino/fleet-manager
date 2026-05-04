@@ -141,7 +141,9 @@ async def list_users(
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED, dependencies=[_can_crear])
 async def create_user(body: UserCreate, current_user: CurrentUser, db: DbSession) -> User:
     """Crea un nuevo usuario en el tenant del usuario autenticado."""
-    existing = await db.execute(select(User).where(User.email == body.email))
+    existing = await db.execute(
+        select(User).where(User.email == body.email, User.tenant_id == current_user.tenant_id)
+    )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El email ya está registrado")
 
@@ -190,15 +192,14 @@ async def update_user(
     return result2.scalar_one()
 
 
-@router.patch("/{user_id}/password", response_model=UserResponse)
+@router.patch("/{user_id}/password", response_model=UserResponse, dependencies=[_can_editar])
 async def change_password(
     user_id: uuid.UUID,
     body: UserPasswordChange,
     current_user: CurrentUser,
     db: DbSession,
-    _: User = Depends(require_superadmin),
 ) -> User:
-    """Cambia la contraseña de un usuario. Solo accesible para superadmin."""
+    """Cambia la contraseña de un usuario del tenant. Requiere permiso usuarios:editar."""
     if len(body.password) < 6:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                             detail="La contraseña debe tener al menos 6 caracteres")
@@ -219,6 +220,12 @@ async def change_password(
 @router.get("/{user_id}/permissions", response_model=list[UserPermissionOverrideResponse], dependencies=[_can_editar])
 async def get_user_permissions(user_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> list[UserPermission]:
     """Retorna los overrides de permiso individuales del usuario."""
+    owner = (await db.execute(
+        select(User.id).where(User.id == user_id, User.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if owner is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
     result = await db.execute(
         select(UserPermission)
         .where(UserPermission.user_id == user_id)
