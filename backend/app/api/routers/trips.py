@@ -4,7 +4,7 @@ import uuid
 import math
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select, func
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
@@ -16,7 +16,7 @@ from app.models.tire import Tire
 from app.schemas.common import PaginatedResponse
 from app.schemas.trip import TripCreate, TripResponse, TripUpdate, QuickTripCreate, TripStopCreate, TripStopResponse
 from app.models.trip import EstadoViaje
-from app.tasks.notifications import notify_trip_assigned, notify_trip_started, notify_trip_completed
+from app.tasks.notifications import _async_notify_trip_assigned, _async_notify_trip_started, _async_notify_trip_completed
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -52,7 +52,7 @@ async def _get_trip_scope(current_user, db) -> tuple[str, list[uuid.UUID]]:
 
 
 @router.post("/quick", response_model=TripResponse, status_code=status.HTTP_201_CREATED)
-async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSession) -> Trip:
+async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSession, bg: BackgroundTasks) -> Trip:
     """Carga rápida de reparto: auto-detecta el conductor y vehículo del usuario."""
     driver = (await db.execute(
         select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
@@ -115,7 +115,7 @@ async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSes
 
     await db.refresh(trip)
     if trip.driver_id:
-        notify_trip_assigned.delay(str(trip.id))
+        bg.add_task(_async_notify_trip_assigned, str(trip.id))
     return trip
 
 
@@ -189,11 +189,13 @@ async def list_trips(
 
 
 @router.post("", response_model=TripResponse, status_code=status.HTTP_201_CREATED, dependencies=[_can_crear])
-async def create_trip(body: TripCreate, current_user: CurrentUser, db: DbSession) -> Trip:
+async def create_trip(body: TripCreate, current_user: CurrentUser, db: DbSession, bg: BackgroundTasks) -> Trip:
     trip = Trip(tenant_id=current_user.tenant_id, **body.model_dump())
     db.add(trip)
     await db.flush()
     await db.refresh(trip)
+    if trip.driver_id:
+        bg.add_task(_async_notify_trip_assigned, str(trip.id))
     return trip
 
 
@@ -211,7 +213,7 @@ async def get_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSession)
 
 @router.patch("/{trip_id}", response_model=TripResponse, dependencies=[_can_editar])
 async def update_trip(
-    trip_id: uuid.UUID, body: TripUpdate, current_user: CurrentUser, db: DbSession
+    trip_id: uuid.UUID, body: TripUpdate, current_user: CurrentUser, db: DbSession, bg: BackgroundTasks
 ) -> Trip:
     result = await db.execute(
         select(Trip).where(Trip.id == trip_id, Trip.tenant_id == current_user.tenant_id)
@@ -242,12 +244,12 @@ async def update_trip(
     await db.flush()
     await db.refresh(trip)
     if body.status == EstadoViaje.COMPLETADO:
-        notify_trip_completed.delay(str(trip.id))
+        bg.add_task(_async_notify_trip_completed, str(trip.id))
     return trip
 
 
 @router.post("/{trip_id}/start", response_model=TripResponse)
-async def start_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> Trip:
+async def start_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSession, bg: BackgroundTasks) -> Trip:
     """Inicia un viaje pendiente: lo pasa a en_curso y registra el start_time."""
     driver = (await db.execute(
         select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
@@ -269,7 +271,7 @@ async def start_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSessio
     trip.start_time = datetime.now(timezone.utc)
     await db.flush()
     await db.refresh(trip)
-    notify_trip_started.delay(str(trip.id))
+    bg.add_task(_async_notify_trip_started, str(trip.id))
     return trip
 
 
