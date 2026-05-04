@@ -38,6 +38,7 @@ class Notification(Base, TimestampMixin):
     # Entidad relacionada (ej: vehicle_id, tire_id, work_order_id)
     related_entity_type: Mapped[str | None] = mapped_column(String(100))
     related_entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    link: Mapped[str | None] = mapped_column(String(300))
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     # Cuándo fue efectivamente enviada (push/email)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

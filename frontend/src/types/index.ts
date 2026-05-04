@@ -223,6 +223,21 @@ export interface Role {
   permissions: Permission[]
 }
 
+export interface Notification {
+  id: string
+  tenant_id: string
+  user_id: string
+  notification_type: string
+  title: string
+  body: string | null
+  link: string | null
+  related_entity_type: string | null
+  related_entity_id: string | null
+  is_read: boolean
+  sent_at: string | null
+  created_at: string
+}
+
 export interface PaginatedResponse<T> {
   items: T[]
   total: number

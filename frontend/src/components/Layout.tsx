@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermissions } from '@/hooks/usePermissions'
 import {
   Truck, Wrench, Route, Package, BarChart3,
   LogOut, User, Forklift, Users, UserCog,
-  Menu, X, Building2, Satellite, Settings, ShieldAlert,
+  Menu, X, Building2, Satellite, Settings, ShieldAlert, Bell,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { api } from '@/lib/api'
 
 const NAV_ITEMS: { to: string; label: string; icon: React.ElementType; perm?: [string, string] }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -43,6 +45,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const visibleItems = NAV_ITEMS.filter(item => !item.perm || can(item.perm[0], item.perm[1]))
   const visibleAdminItems = ADMIN_ITEMS.filter(item => user?.is_superadmin || (item.perm && can(item.perm[0], item.perm[1])))
 
+  const { data: unreadData } = useQuery({
+    queryKey: ['notifications', 'unread'],
+    queryFn: () => api.get<{ count: number }>('/notifications/unread-count').then(r => r.data),
+    refetchInterval: 60_000,
+    enabled: !!user,
+  })
+  const unreadCount = unreadData?.count ?? 0
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
@@ -64,6 +74,27 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             {label}
           </NavLink>
         ))}
+
+        <NavLink
+          to="/notifications"
+          onClick={onNavigate}
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+              isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            )
+          }
+        >
+          <div className="relative">
+            <Bell size={18} />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </div>
+          Notificaciones
+        </NavLink>
 
         {(visibleAdminItems.length > 0 || user?.is_superadmin) && (
           <>

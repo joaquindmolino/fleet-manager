@@ -16,6 +16,7 @@ from app.models.tire import Tire
 from app.schemas.common import PaginatedResponse
 from app.schemas.trip import TripCreate, TripResponse, TripUpdate, QuickTripCreate, TripStopCreate, TripStopResponse
 from app.models.trip import EstadoViaje
+from app.tasks.notifications import notify_trip_assigned, notify_trip_started, notify_trip_completed
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -113,6 +114,8 @@ async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSes
         vehicle.odometer = body.start_odometer
 
     await db.refresh(trip)
+    if trip.driver_id:
+        notify_trip_assigned.delay(str(trip.id))
     return trip
 
 
@@ -238,6 +241,8 @@ async def update_trip(
 
     await db.flush()
     await db.refresh(trip)
+    if body.status == EstadoViaje.COMPLETADO:
+        notify_trip_completed.delay(str(trip.id))
     return trip
 
 
@@ -264,6 +269,7 @@ async def start_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSessio
     trip.start_time = datetime.now(timezone.utc)
     await db.flush()
     await db.refresh(trip)
+    notify_trip_started.delay(str(trip.id))
     return trip
 
 

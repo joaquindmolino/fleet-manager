@@ -1,6 +1,7 @@
 """Configuración de Celery para tareas asíncronas (alertas, sincronización GPS, etc.)."""
 
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import settings
 
@@ -18,10 +19,15 @@ celery_app.conf.update(
     timezone="America/Argentina/Buenos_Aires",
     enable_utc=True,
     beat_schedule={
-        # Verificar vencimientos cada hora
-        "check-expirations-hourly": {
-            "task": "app.tasks.notifications.check_expirations",
-            "schedule": 3600.0,
+        # Resumen diario de viajes — 20:00 ART
+        "daily-trips-summary": {
+            "task": "app.tasks.notifications.daily_trips_summary",
+            "schedule": crontab(hour=20, minute=0),
+        },
+        # Alertas de mantenimiento — 07:00 ART
+        "daily-maintenance-alerts": {
+            "task": "app.tasks.notifications.daily_maintenance_alerts",
+            "schedule": crontab(hour=7, minute=0),
         },
         # Sincronizar lecturas GPS cada 5 minutos
         "sync-gps-every-5min": {

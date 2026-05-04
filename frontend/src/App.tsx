@@ -18,6 +18,7 @@ import GpsConfigPage from '@/pages/GpsConfigPage'
 import ConfigPage from '@/pages/ConfigPage'
 import TripDetailPage from '@/pages/TripDetailPage'
 import AdminPage from '@/pages/AdminPage'
+import NotificationsPage from '@/pages/NotificationsPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth()
@@ -63,6 +64,7 @@ export default function App() {
           <Route path="config" element={<RequirePermission module="configuracion" action="editar"><ConfigPage /></RequirePermission>} />
           <Route path="users" element={<UsersPage />} />
           <Route path="admin" element={<AdminPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -25,9 +25,9 @@ class Settings(BaseSettings):
     # Firebase
     FIREBASE_CREDENTIALS_PATH: str = ""
 
-    # SendGrid
-    SENDGRID_API_KEY: str = ""
-    EMAIL_FROM: str = "no-reply@fleetmanager.app"
+    # Resend (email)
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "Fleet Manager <noreply@fleetmanager.app>"
 
     @model_validator(mode="before")
     @classmethod
