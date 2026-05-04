@@ -186,7 +186,6 @@ export default function TripsPage() {
                 : data?.items.map(t => {
                   const v = vehicleMap[t.vehicle_id]
                   const d = t.driver_id ? driverMap[t.driver_id] : null
-                  const kmDriven = t.start_odometer && t.end_odometer ? t.end_odometer - t.start_odometer : null
                   return editingId === t.id ? (
                     <tr key={t.id} className={editRow}>
                       <form id={`e-${t.id}`} onSubmit={e => { e.preventDefault(); updateMutation.mutate({ id: t.id, body: { origin: editForm.origin, destination: editForm.destination, end_odometer: editForm.end_odometer ? parseInt(editForm.end_odometer) : null } }) }} />
