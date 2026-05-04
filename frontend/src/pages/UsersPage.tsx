@@ -404,6 +404,7 @@ export default function UsersPage() {
   const [editForm, setEditForm] = useState<Omit<UF, 'password'>>({ full_name: '', email: '', role_id: '' })
   const [addingRow, setAddingRow] = useState(false)
   const [addForm, setAddForm] = useState<UF>(EMPTY)
+  const [addError, setAddError] = useState('')
   const [passwordTarget, setPasswordTarget] = useState<User | null>(null)
   const [passwordForm, setPasswordForm] = useState<PasswordForm>({ password: '', confirm: '' })
   const [passwordError, setPasswordError] = useState('')
@@ -429,7 +430,8 @@ export default function UsersPage() {
 
   const createMutation = useMutation({
     mutationFn: (body: object) => api.post('/users', body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); setAddingRow(false); setAddForm(EMPTY) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); setAddingRow(false); setAddForm(EMPTY); setAddError('') },
+    onError: (e: { response?: { data?: { detail?: string } } }) => setAddError(e.response?.data?.detail ?? 'Error al crear el usuario.'),
   })
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: object }) => api.patch(`/users/${id}`, body),
@@ -492,10 +494,11 @@ export default function UsersPage() {
             </thead>
             <tbody>
               {addingRow && (
+                <>
                 <tr className={addRow}>
-                  <td className="px-3 py-2"><input required value={addForm.full_name} onChange={e => af('full_name', e.target.value)} placeholder="Nombre *" className={CI} /></td>
-                  <td className="px-3 py-2"><input required type="email" value={addForm.email} onChange={e => af('email', e.target.value)} placeholder="email@empresa.com *" className={CI} /></td>
-                  <td className="px-3 py-2"><input required type="password" minLength={6} value={addForm.password} onChange={e => af('password', e.target.value)} placeholder="Mínimo 6 chars *" className={CI} /></td>
+                  <td className="px-3 py-2"><input value={addForm.full_name} onChange={e => af('full_name', e.target.value)} placeholder="Nombre *" className={CI} /></td>
+                  <td className="px-3 py-2"><input type="email" value={addForm.email} onChange={e => af('email', e.target.value)} placeholder="email@empresa.com *" className={CI} /></td>
+                  <td className="px-3 py-2"><input type="password" value={addForm.password} onChange={e => { af('password', e.target.value); setAddError('') }} placeholder="Mínimo 6 caracteres *" className={CI} /></td>
                   <td className="px-3 py-2">
                     <select value={addForm.role_id} onChange={e => af('role_id', e.target.value)} className={CS}>
                       <option value="">Sin rol</option>
@@ -507,14 +510,28 @@ export default function UsersPage() {
                     <div className="flex gap-1">
                       <button
                         type="button"
-                        disabled={isPending || !addForm.full_name || !addForm.email || addForm.password.length < 6}
-                        onClick={() => createMutation.mutate({ full_name: addForm.full_name, email: addForm.email, password: addForm.password, role_id: addForm.role_id || null })}
+                        disabled={isPending}
+                        onClick={() => {
+                          if (!addForm.full_name.trim()) { setAddError('El nombre es obligatorio.'); return }
+                          if (!addForm.email.trim()) { setAddError('El email es obligatorio.'); return }
+                          if (addForm.password.length < 6) { setAddError('La contraseña debe tener al menos 6 caracteres.'); return }
+                          setAddError('')
+                          createMutation.mutate({ full_name: addForm.full_name, email: addForm.email, password: addForm.password, role_id: addForm.role_id || null })
+                        }}
                         className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
-                      >Guardar</button>
-                      <button type="button" onClick={() => setAddingRow(false)} className="text-xs border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Cancelar</button>
+                      >{createMutation.isPending ? 'Guardando...' : 'Guardar'}</button>
+                      <button type="button" onClick={() => { setAddingRow(false); setAddError('') }} className="text-xs border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Cancelar</button>
                     </div>
                   </td>
                 </tr>
+                {addError && (
+                  <tr className={addRow}>
+                    <td colSpan={6} className="px-3 pb-2">
+                      <p className="text-xs text-red-600">{addError}</p>
+                    </td>
+                  </tr>
+                )}
+                </>
               )}
 
               {data?.items.length === 0 && !addingRow
