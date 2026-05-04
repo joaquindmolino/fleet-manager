@@ -19,7 +19,11 @@ api.interceptors.response.use(
   (error) => {
     const status: number | null = error.response?.status ?? null
 
-    if (status === 401 && !error.config?.url?.includes('/auth/login')) {
+    if (error.config?.url?.includes('/auth/login')) {
+      return Promise.reject(error)
+    }
+
+    if (status === 401) {
       localStorage.removeItem('access_token')
       window.location.href = '/login'
       return Promise.reject(error)
