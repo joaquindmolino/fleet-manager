@@ -4,6 +4,7 @@ import { Plus, ShieldAlert, UserCog, KeyRound, ToggleLeft, ToggleRight, Shield, 
 import { Navigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
+import { usePermissions } from '@/hooks/usePermissions'
 import type { PaginatedResponse, User, Role, UserPermissionOverride, Driver, Vehicle, Machine } from '@/types'
 
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
@@ -396,6 +397,7 @@ function TeamEditor({ targetUser, onClose }: TeamEditorProps) {
 
 export default function UsersPage() {
   const { user: me, isLoading: authLoading } = useAuth()
+  const { can } = usePermissions()
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -410,18 +412,18 @@ export default function UsersPage() {
   const [teamTarget, setTeamTarget] = useState<User | null>(null)
   const [fleetTarget, setFleetTarget] = useState<User | null>(null)
 
-  const isSuperadmin = !authLoading && !!me?.is_superadmin
+  const canManageUsers = !authLoading && (!!me?.is_superadmin || can('usuarios', 'ver'))
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', page],
     queryFn: () => api.get<PaginatedResponse<User>>(`/users?page=${page}&size=20`).then(r => r.data),
-    enabled: isSuperadmin,
+    enabled: canManageUsers,
   })
   const { data: roles } = useQuery({
     queryKey: ['roles'],
     queryFn: () => api.get<Role[]>('/users/roles').then(r => r.data),
     staleTime: 60_000,
-    enabled: isSuperadmin,
+    enabled: canManageUsers,
   })
   const roleMap = Object.fromEntries((roles ?? []).map(r => [r.id, r]))
 
@@ -440,7 +442,7 @@ export default function UsersPage() {
   })
 
   if (authLoading) return <div className="p-12 text-center text-gray-400 text-sm">Cargando...</div>
-  if (!me?.is_superadmin) return <Navigate to="/dashboard" replace />
+  if (!canManageUsers) return <Navigate to="/dashboard" replace />
 
   function startEdit(u: User) {
     setAddingRow(false); setEditingId(u.id)

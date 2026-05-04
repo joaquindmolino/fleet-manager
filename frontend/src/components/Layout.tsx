@@ -21,9 +21,9 @@ const NAV_ITEMS: { to: string; label: string; icon: React.ElementType; perm?: [s
   { to: '/satellite', label: 'Satelital', icon: Satellite, perm: ['gps', 'ver'] },
 ]
 
-const ADMIN_ITEMS = [
-  { to: '/users', label: 'Usuarios', icon: UserCog },
-  { to: '/config', label: 'Configuración', icon: Settings },
+const ADMIN_ITEMS: { to: string; label: string; icon: React.ElementType; perm?: [string, string] }[] = [
+  { to: '/users', label: 'Usuarios', icon: UserCog, perm: ['usuarios', 'ver'] },
+  { to: '/config', label: 'Configuración', icon: Settings, perm: ['configuracion', 'ver'] },
 ]
 
 const SUPERADMIN_ITEMS = [
@@ -41,6 +41,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   const visibleItems = NAV_ITEMS.filter(item => !item.perm || can(item.perm[0], item.perm[1]))
+  const visibleAdminItems = ADMIN_ITEMS.filter(item => user?.is_superadmin || (item.perm && can(item.perm[0], item.perm[1])))
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -64,12 +65,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </NavLink>
         ))}
 
-        {user?.is_superadmin && (
+        {(visibleAdminItems.length > 0 || user?.is_superadmin) && (
           <>
             <div className="pt-3 pb-1 px-3">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Administración</p>
             </div>
-            {ADMIN_ITEMS.map(({ to, label, icon: Icon }) => (
+            {visibleAdminItems.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -87,7 +88,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 {label}
               </NavLink>
             ))}
-            {!impersonating && SUPERADMIN_ITEMS.map(({ to, label, icon: Icon }) => (
+            {user?.is_superadmin && !impersonating && SUPERADMIN_ITEMS.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
