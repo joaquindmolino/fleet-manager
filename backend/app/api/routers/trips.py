@@ -103,6 +103,7 @@ async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSes
         associated_document=body.associated_document,
         stops_count=body.stops_count,
         start_odometer=body.start_odometer,
+        scheduled_date=body.scheduled_date,
         notes=body.notes,
     )
     db.add(trip)

@@ -15,6 +15,7 @@ class TripBase(BaseModel):
     associated_document: str | None = None
     stops_count: int | None = None
     client_id: uuid.UUID | None = None
+    scheduled_date: datetime | None = None
 
 
 class TripCreate(TripBase):
@@ -30,6 +31,7 @@ class QuickTripCreate(BaseModel):
     start_odometer: int | None = None
     notes: str | None = None
     client_id: uuid.UUID | None = None
+    scheduled_date: datetime | None = None
 
 
 class TripUpdate(BaseModel):
@@ -39,6 +41,7 @@ class TripUpdate(BaseModel):
     stops_count: int | None = None
     start_odometer: int | None = None
     client_id: uuid.UUID | None = None
+    scheduled_date: datetime | None = None
     end_odometer: int | None = None
     end_time: datetime | None = None
     status: EstadoViaje | None = None

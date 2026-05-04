@@ -21,8 +21,8 @@ const STATUS_COLOR: Record<string, string> = {
   cancelado: 'bg-gray-100 text-gray-400',
 }
 
-interface TF { vehicle_id: string; driver_id: string; origin: string; destination: string; start_odometer: string }
-const EMPTY: TF = { vehicle_id: '', driver_id: '', origin: '', destination: '', start_odometer: '' }
+interface TF { vehicle_id: string; driver_id: string; origin: string; destination: string; start_odometer: string; scheduled_date: string }
+const EMPTY: TF = { vehicle_id: '', driver_id: '', origin: '', destination: '', start_odometer: '', scheduled_date: '' }
 
 interface EF { origin: string; destination: string; end_odometer: string }
 
@@ -104,7 +104,7 @@ export default function TripsPage() {
   }
 
   function formatDate(t: Trip) {
-    const d = t.end_time ?? t.start_time ?? t.created_at
+    const d = t.end_time ?? t.start_time ?? t.scheduled_date ?? t.created_at
     return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
   }
 
@@ -151,6 +151,7 @@ export default function TripsPage() {
                       origin: addForm.origin,
                       destination: addForm.destination,
                       start_odometer: addForm.start_odometer ? parseInt(addForm.start_odometer) : null,
+                      scheduled_date: addForm.scheduled_date || null,
                     })
                   }} />
                   <td className="px-3 py-2"><input form="add-tr" required value={addForm.origin} onChange={e => af('origin', e.target.value)} placeholder="Origen *" className={CI} /></td>
@@ -169,7 +170,7 @@ export default function TripsPage() {
                   </td>
                   <td className="px-3 py-2 text-gray-300 text-xs">—</td>
                   <td className="px-3 py-2"><input form="add-tr" type="number" min="0" value={addForm.start_odometer} onChange={e => af('start_odometer', e.target.value)} placeholder="Km inicial" className={CI} /></td>
-                  <td className="px-3 py-2 text-gray-300 text-xs">—</td>
+                  <td className="px-3 py-2"><input form="add-tr" type="date" value={addForm.scheduled_date} onChange={e => af('scheduled_date', e.target.value)} className={CI} /></td>
                   <td className="px-3 py-2 text-gray-400 text-xs">Planificado</td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">

@@ -25,10 +25,11 @@ interface Form {
   stops_count: string
   start_odometer: string
   client_id: string
+  scheduled_date: string
   notes: string
 }
 
-const EMPTY: Form = { associated_document: '', stops_count: '', start_odometer: '', client_id: '', notes: '' }
+const EMPTY: Form = { associated_document: '', stops_count: '', start_odometer: '', client_id: '', scheduled_date: '', notes: '' }
 
 const CI = 'w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow'
 
@@ -69,10 +70,11 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     createMutation.mutate({
-      associated_document: form.associated_document,
+      associated_document: form.associated_document || null,
       stops_count: form.stops_count ? parseInt(form.stops_count) : null,
       start_odometer: form.start_odometer ? parseInt(form.start_odometer) : null,
       client_id: form.client_id || null,
+      scheduled_date: form.scheduled_date || null,
       notes: form.notes || null,
     })
   }
@@ -168,6 +170,18 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
                 </select>
               </div>
             )}
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+                Fecha programada
+              </label>
+              <input
+                type="date"
+                value={form.scheduled_date}
+                onChange={e => f('scheduled_date', e.target.value)}
+                className={CI}
+              />
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>

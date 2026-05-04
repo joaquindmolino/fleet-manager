@@ -37,6 +37,7 @@ class Trip(Base, TimestampMixin):
     destination: Mapped[str] = mapped_column(String(300), nullable=False)
     start_odometer: Mapped[int | None] = mapped_column(Integer)
     end_odometer: Mapped[int | None] = mapped_column(Integer)
+    scheduled_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(50), default=EstadoViaje.PLANIFICADO, nullable=False, index=True)
