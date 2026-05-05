@@ -278,7 +278,6 @@ export default function TripsPage() {
             {data.items.map(t => {
               const v = vehicleMap[t.vehicle_id]
               const d = t.driver_id ? driverMap[t.driver_id] : null
-              const kmDriven = t.start_odometer && t.end_odometer ? t.end_odometer - t.start_odometer : null
               return (
                 <div key={t.id} className="flex items-stretch">
                   {/* Tappable left area */}
