@@ -31,9 +31,10 @@ function markerColor(pos: VehiclePosition): string {
   return '#f59e0b'
 }
 
-function TruckMarker({ color }: { color: string }) {
+function TruckMarker({ color, onClick }: { color: string; onClick?: () => void }) {
   return (
-    <svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg">
+    <svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg"
+      onClick={onClick} style={{ cursor: 'pointer' }}>
       <circle cx="21" cy="21" r="19" fill={color} stroke="white" strokeWidth="2.5"/>
       {/* Cargo body */}
       <rect x="5" y="15" width="18" height="11" rx="1.5" fill="white"/>
@@ -208,9 +209,11 @@ export default function SatellitePage() {
                 key={pos.powerfleet_id}
                 anchor={[pos.latitude!, pos.longitude!]}
                 width={42}
-                onClick={() => setSelected(s => s?.powerfleet_id === pos.powerfleet_id ? null : pos)}
               >
-                <TruckMarker color={markerColor(pos)} />
+                <TruckMarker
+                  color={markerColor(pos)}
+                  onClick={() => setSelected(s => s?.powerfleet_id === pos.powerfleet_id ? null : pos)}
+                />
               </Marker>
             ))}
 
