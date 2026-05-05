@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 
 class GpsConfigCreate(BaseModel):
+    server_url: str
     username: str
     password: str
 
@@ -13,8 +14,8 @@ class GpsConfigResponse(BaseModel):
     id: uuid.UUID
     provider: str
     is_active: bool
+    server_url: str | None
     username: str | None
-    user_id: str | None
 
     model_config = {"from_attributes": True}
 

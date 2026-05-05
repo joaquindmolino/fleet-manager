@@ -1,7 +1,6 @@
-"""Router de integración GPS (PowerFleet)."""
+"""Router de integración GPS (Powerfleet Unity)."""
 
 import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -10,7 +9,7 @@ from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
 from app.models.gps import GpsConfig
 from app.models.vehicle import Vehicle
 from app.schemas.gps import GpsConfigCreate, GpsConfigResponse, VehiclePositionResponse
-from app.gps.powerfleet import fetch_user_id, get_vehicle_positions, invalidate_token_cache
+from app.gps.powerfleet import validate_credentials, get_vehicle_positions, invalidate_token_cache
 
 router = APIRouter(prefix="/gps", tags=["gps"])
 
@@ -36,23 +35,23 @@ async def get_gps_config(current_user: CurrentUser, db: DbSession) -> GpsConfigR
         id=config.id,
         provider=config.provider,
         is_active=config.is_active,
+        server_url=config.api_url,
         username=extra.get("username"),
-        user_id=extra.get("user_id"),
     )
 
 
 @router.post("/config", response_model=GpsConfigResponse, dependencies=[_can_editar])
 async def save_gps_config(body: GpsConfigCreate, current_user: CurrentUser, db: DbSession) -> GpsConfigResponse:
     """
-    Guarda o actualiza las credenciales de PowerFleet.
-    Valida las credenciales contra la API y obtiene el userId automáticamente.
+    Guarda o actualiza las credenciales de Powerfleet Unity.
+    Valida las credenciales contra la API antes de guardar.
     """
     try:
-        user_id = await fetch_user_id(body.username, body.password)
+        await validate_credentials(body.server_url, body.username, body.password)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"No se pudo conectar con PowerFleet: {e}",
+            detail=f"No se pudo conectar con Powerfleet: {e}",
         )
 
     config = (await db.execute(
@@ -65,7 +64,6 @@ async def save_gps_config(body: GpsConfigCreate, current_user: CurrentUser, db: 
     extra = {
         "username": body.username,
         "password": body.password,
-        "user_id": user_id,
     }
 
     if config is None:
@@ -73,13 +71,14 @@ async def save_gps_config(body: GpsConfigCreate, current_user: CurrentUser, db: 
             id=uuid.uuid4(),
             tenant_id=current_user.tenant_id,
             provider="powerfleet",
-            api_url="https://api.fleetcomplete.com",
+            api_url=body.server_url,
             extra_config=extra,
             is_active=True,
         )
         db.add(config)
     else:
         invalidate_token_cache(str(config.id))
+        config.api_url = body.server_url
         config.extra_config = extra
         config.is_active = True
 
@@ -90,14 +89,14 @@ async def save_gps_config(body: GpsConfigCreate, current_user: CurrentUser, db: 
         id=config.id,
         provider=config.provider,
         is_active=config.is_active,
-        username=extra["username"],
-        user_id=user_id,
+        server_url=config.api_url,
+        username=body.username,
     )
 
 
 @router.get("/positions", response_model=list[VehiclePositionResponse], dependencies=[_can_ver])
 async def get_positions(current_user: CurrentUser, db: DbSession) -> list[VehiclePositionResponse]:
-    """Retorna la posición en tiempo real de todos los vehículos activos desde PowerFleet."""
+    """Retorna la posición en tiempo real de todos los vehículos activos desde Powerfleet."""
     config = (await db.execute(
         select(GpsConfig).where(
             GpsConfig.tenant_id == current_user.tenant_id,
@@ -109,21 +108,20 @@ async def get_positions(current_user: CurrentUser, db: DbSession) -> list[Vehicl
     if config is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="GPS no configurado. Un administrador debe cargar las credenciales de PowerFleet.",
+            detail="GPS no configurado. Un administrador debe cargar las credenciales de Powerfleet.",
         )
 
     extra = config.extra_config or {}
+    base_url = config.api_url
     username = extra.get("username")
     password = extra.get("password")
-    user_id = extra.get("user_id")
 
-    if not username or not password or not user_id:
+    if not base_url or not username or not password:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Configuración GPS incompleta. Reconfigurá las credenciales.",
         )
 
-    # Cargar nuestros vehículos para hacer el match por patente
     vehicles = (await db.execute(
         select(Vehicle).where(Vehicle.tenant_id == current_user.tenant_id)
     )).scalars().all()
@@ -137,15 +135,15 @@ async def get_positions(current_user: CurrentUser, db: DbSession) -> list[Vehicl
     try:
         positions = await get_vehicle_positions(
             config_id=str(config.id),
+            base_url=base_url,
             username=username,
             password=password,
-            user_id=user_id,
             plate_to_vehicle_id=plate_to_id,
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Error al consultar PowerFleet: {e}",
+            detail=f"Error al consultar Powerfleet: {e}",
         )
 
     return [

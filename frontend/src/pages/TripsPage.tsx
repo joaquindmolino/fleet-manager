@@ -103,9 +103,20 @@ export default function TripsPage() {
     })
   }
 
-  function formatDate(t: Trip) {
-    const d = t.end_time ?? t.start_time ?? t.scheduled_date ?? t.created_at
+  function formatDate(t: Trip): string {
+    const d = t.status === 'completado'
+      ? (t.end_time ?? t.start_time ?? t.scheduled_date ?? t.created_at)
+      : t.status === 'en_curso'
+      ? (t.start_time ?? t.scheduled_date ?? t.created_at)
+      : (t.scheduled_date ?? t.created_at)
     return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+  }
+
+  function dateLabel(t: Trip): string {
+    if (t.status === 'completado' && t.end_time) return 'Fin'
+    if (t.status === 'en_curso' && t.start_time) return 'Inicio'
+    if (t.scheduled_date) return 'Programado'
+    return ''
   }
 
   const activeVehicles = (vehicles ?? []).filter(v => v.status !== 'baja')
@@ -194,7 +205,10 @@ export default function TripsPage() {
                       <td className="px-3 py-2 text-gray-400 text-xs">{t.client_id ? (clientMap[t.client_id]?.name ?? '—') : '—'}</td>
                       <td className="px-3 py-2 text-gray-400 font-mono text-xs">{v ? v.plate : '—'}</td>
                       <td className="px-3 py-2 text-gray-400 text-xs">{d?.full_name ?? '—'}</td>
-                      <td className="px-3 py-2 text-gray-400 text-xs">{formatDate(t)}</td>
+                      <td className="px-3 py-2 text-gray-400 text-xs">
+                        <div>{formatDate(t)}</div>
+                        {dateLabel(t) && <div className="text-gray-400 text-[10px] mt-0.5">{dateLabel(t)}</div>}
+                      </td>
                       <td className="px-3 py-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[t.status] ?? 'bg-gray-100 text-gray-500'}`}>{STATUS_LABEL[t.status] ?? t.status}</span></td>
                       <td className="px-3 py-2">
                         <div className="flex gap-1">
@@ -214,7 +228,10 @@ export default function TripsPage() {
                       <td className="px-3 py-3 text-gray-500 text-xs">{t.client_id ? (clientMap[t.client_id]?.name ?? '—') : '—'}</td>
                       <td className="px-3 py-3 text-gray-700 font-mono text-xs">{v ? v.plate : '—'}</td>
                       <td className="px-3 py-3 text-gray-500">{d?.full_name ?? '—'}</td>
-                      <td className="px-3 py-3 text-gray-500 text-xs">{formatDate(t)}</td>
+                      <td className="px-3 py-3 text-gray-500 text-xs">
+                        <div>{formatDate(t)}</div>
+                        {dateLabel(t) && <div className="text-gray-400 text-[10px] mt-0.5">{dateLabel(t)}</div>}
+                      </td>
                       <td className="px-3 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[t.status] ?? 'bg-gray-100 text-gray-500'}`}>{STATUS_LABEL[t.status] ?? t.status}</span></td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-3">
@@ -275,11 +292,7 @@ export default function TripsPage() {
                       {d ? d.full_name : (!v ? '—' : null)}
                     </p>
                     <p className="text-xs text-gray-400">
-                      {kmDriven !== null
-                        ? `${kmDriven.toLocaleString('es-AR')} km`
-                        : t.start_odometer
-                          ? t.start_odometer.toLocaleString('es-AR')
-                          : '—'}
+                      {dateLabel(t) ? `${dateLabel(t)}: ${formatDate(t)}` : formatDate(t)}
                     </p>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[t.status] ?? 'bg-gray-100 text-gray-500'}`}>
                       {STATUS_LABEL[t.status] ?? t.status}

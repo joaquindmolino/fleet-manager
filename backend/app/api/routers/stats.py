@@ -17,6 +17,8 @@ class DashboardStats(BaseModel):
     vehicles_activos: int
     ordenes_abiertas: int
     trips_en_curso: int
+    trips_pendientes: int
+    trips_planificados: int
     choferes_activos: int
 
 
@@ -49,6 +51,22 @@ async def get_dashboard_stats(current_user: CurrentUser, db: DbSession) -> Dashb
         )
     ).scalar_one()
 
+    trips_pendientes = (
+        await db.execute(
+            select(func.count())
+            .select_from(Trip)
+            .where(Trip.tenant_id == tid, Trip.status == "pendiente")
+        )
+    ).scalar_one()
+
+    trips_planificados = (
+        await db.execute(
+            select(func.count())
+            .select_from(Trip)
+            .where(Trip.tenant_id == tid, Trip.status == "planificado")
+        )
+    ).scalar_one()
+
     choferes_activos = (
         await db.execute(
             select(func.count())
@@ -61,5 +79,7 @@ async def get_dashboard_stats(current_user: CurrentUser, db: DbSession) -> Dashb
         vehicles_activos=vehicles_activos,
         ordenes_abiertas=ordenes_abiertas,
         trips_en_curso=trips_en_curso,
+        trips_pendientes=trips_pendientes,
+        trips_planificados=trips_planificados,
         choferes_activos=choferes_activos,
     )

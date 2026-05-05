@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Truck, Wrench, Route, Users, PackageCheck, Timer, AlertTriangle, AlertCircle } from 'lucide-react'
+import { Truck, Wrench, Route, Users, PackageCheck, Timer, AlertTriangle, AlertCircle, CalendarClock } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -16,6 +16,8 @@ interface DashboardStats {
   vehicles_activos: number
   ordenes_abiertas: number
   trips_en_curso: number
+  trips_pendientes: number
+  trips_planificados: number
   choferes_activos: number
 }
 
@@ -69,6 +71,7 @@ export default function DashboardPage() {
   const { can } = usePermissions()
   const canSeeWorkOrders = can('mantenimiento', 'ver')
   const canUpdateHours = can('maquinas', 'editar')
+  const canSeeTrips = can('viajes', 'ver')
   const [quickTripOpen, setQuickTripOpen] = useState(false)
   const [quickHoursOpen, setQuickHoursOpen] = useState(false)
 
@@ -189,6 +192,45 @@ export default function DashboardPage() {
           to="/drivers"
         />
       </div>
+
+      {canSeeTrips && !myDriver && stats && (stats.trips_pendientes > 0 || stats.trips_planificados > 0) && (
+        <div className="mb-6 bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+              <CalendarClock size={16} className="text-blue-500" />
+              Viajes programados y pendientes
+            </h2>
+            <Link to="/trips" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+              Ver todos →
+            </Link>
+          </div>
+          <div className="px-5 py-4 flex items-center gap-6">
+            {stats.trips_pendientes > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-amber-100 text-amber-700">
+                  {stats.trips_pendientes}
+                </span>
+                <span className="text-sm text-gray-600">
+                  {stats.trips_pendientes === 1 ? 'viaje pendiente de iniciar' : 'viajes pendientes de iniciar'}
+                </span>
+              </div>
+            )}
+            {stats.trips_pendientes > 0 && stats.trips_planificados > 0 && (
+              <span className="text-gray-300">|</span>
+            )}
+            {stats.trips_planificados > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-blue-100 text-blue-700">
+                  {stats.trips_planificados}
+                </span>
+                <span className="text-sm text-gray-600">
+                  {stats.trips_planificados === 1 ? 'viaje programado' : 'viajes programados'}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {alertsData && alertsData.total > 0 && (
         <div className="mb-6 bg-white rounded-xl border border-gray-200 overflow-hidden">
