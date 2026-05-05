@@ -46,6 +46,8 @@ export default function DriversPage() {
   const qc = useQueryClient()
   const { can } = usePermissions()
   const canSeeVehicles = can('vehiculos', 'ver')
+  const canCrear = can('conductores', 'crear')
+  const canEditar = can('conductores', 'editar')
   const [page, setPage] = useState(1)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<DF>(EMPTY)
@@ -117,14 +119,16 @@ export default function DriversPage() {
           <h1 className="text-2xl font-bold text-gray-900">Conductores</h1>
           <p className="text-sm text-gray-500 mt-0.5">{data?.total ?? '—'} conductores registrados</p>
         </div>
-        <button
-          onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus size={16} />
-          <span className="hidden sm:inline">Agregar conductor</span>
-          <span className="sm:hidden">Agregar</span>
-        </button>
+        {canCrear && (
+          <button
+            onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus size={16} />
+            <span className="hidden sm:inline">Agregar conductor</span>
+            <span className="sm:hidden">Agregar</span>
+          </button>
+        )}
       </div>
 
       {/* Desktop table */}
@@ -250,7 +254,7 @@ export default function DriversPage() {
                           : <span className="text-gray-300 text-xs">Sin usuario</span>}
                       </td>
                       <td className="px-3 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[d.status]}`}>{STATUS_LABEL[d.status] ?? d.status}</span></td>
-                      <td className="px-3 py-3 text-right"><button onClick={() => startEdit(d)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button></td>
+                      <td className="px-3 py-3 text-right">{canEditar && <button onClick={() => startEdit(d)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button>}</td>
                     </tr>
                   )
                 })
@@ -355,7 +359,7 @@ export default function DriversPage() {
               </div>
               <div className="flex flex-col items-end gap-2 shrink-0">
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[d.status]}`}>{STATUS_LABEL[d.status] ?? d.status}</span>
-                <button onClick={() => startEdit(d)} className="text-xs text-blue-600 font-medium">Editar</button>
+                {canEditar && <button onClick={() => startEdit(d)} className="text-xs text-blue-600 font-medium">Editar</button>}
               </div>
             </div>
           )

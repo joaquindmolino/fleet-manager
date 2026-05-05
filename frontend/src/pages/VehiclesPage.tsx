@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Truck } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
+import { usePermissions } from '@/hooks/usePermissions'
 import type { PaginatedResponse, Vehicle, Driver } from '@/types'
 
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
@@ -33,6 +34,9 @@ function toBody(f: VF, isNew: boolean) {
 
 export default function VehiclesPage() {
   const qc = useQueryClient()
+  const { can } = usePermissions()
+  const canCrear = can('vehiculos', 'crear')
+  const canEditar = can('vehiculos', 'editar')
   const [page, setPage] = useState(1)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<VF>(EMPTY)
@@ -92,14 +96,16 @@ export default function VehiclesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Vehículos</h1>
           <p className="text-sm text-gray-500 mt-0.5">{data?.total ?? '—'} vehículos en la flota</p>
         </div>
-        <button
-          onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus size={16} />
-          <span className="hidden sm:inline">Agregar vehículo</span>
-          <span className="sm:hidden">Agregar</span>
-        </button>
+        {canCrear && (
+          <button
+            onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus size={16} />
+            <span className="hidden sm:inline">Agregar vehículo</span>
+            <span className="sm:hidden">Agregar</span>
+          </button>
+        )}
       </div>
 
       {/* Desktop table */}
@@ -170,7 +176,7 @@ export default function VehiclesPage() {
                     <td className="px-3 py-3 text-gray-600">{v.odometer.toLocaleString('es-AR')} km</td>
                     <td className="px-3 py-3 text-gray-600 text-sm">{driver ? driver.full_name : <span className="text-gray-300 text-xs">Sin asignar</span>}</td>
                     <td className="px-3 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[v.status]}`}>{STATUS_LABEL[v.status]}</span></td>
-                    <td className="px-3 py-3 text-right"><button onClick={() => startEdit(v)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button></td>
+                    <td className="px-3 py-3 text-right">{canEditar && <button onClick={() => startEdit(v)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button>}</td>
                   </tr>
                 )
               })}
@@ -256,7 +262,7 @@ export default function VehiclesPage() {
               </div>
               <div className="flex flex-col items-end gap-2 shrink-0">
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[v.status]}`}>{STATUS_LABEL[v.status]}</span>
-                <button onClick={() => startEdit(v)} className="text-xs text-blue-600 font-medium">Editar</button>
+                {canEditar && <button onClick={() => startEdit(v)} className="text-xs text-blue-600 font-medium">Editar</button>}
               </div>
             </div>
           )
