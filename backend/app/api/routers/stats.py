@@ -27,53 +27,94 @@ async def get_dashboard_stats(current_user: CurrentUser, db: DbSession) -> Dashb
     """Retorna métricas generales de la flota para el dashboard."""
     tid = current_user.tenant_id
 
-    vehicles_activos = (
-        await db.execute(
-            select(func.count())
-            .select_from(Vehicle)
-            .where(Vehicle.tenant_id == tid, Vehicle.status != "baja")
-        )
-    ).scalar_one()
+    # Si el usuario es chofer, acotar todas las métricas a su propio perfil y vehículo
+    self_driver = (await db.execute(
+        select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == tid)
+    )).scalar_one_or_none()
 
-    ordenes_abiertas = (
-        await db.execute(
-            select(func.count())
-            .select_from(WorkOrder)
-            .where(WorkOrder.tenant_id == tid, WorkOrder.status.in_(["abierta", "en_progreso"]))
-        )
-    ).scalar_one()
+    if self_driver is not None:
+        vid = self_driver.vehicle_id
 
-    trips_en_curso = (
-        await db.execute(
-            select(func.count())
-            .select_from(Trip)
-            .where(Trip.tenant_id == tid, Trip.status == "en_curso")
-        )
-    ).scalar_one()
+        vehicles_activos = (
+            await db.execute(
+                select(func.count()).select_from(Vehicle)
+                .where(Vehicle.tenant_id == tid, Vehicle.id == vid, Vehicle.status != "baja")
+            )
+        ).scalar_one() if vid else 0
 
-    trips_pendientes = (
-        await db.execute(
-            select(func.count())
-            .select_from(Trip)
-            .where(Trip.tenant_id == tid, Trip.status == "pendiente")
-        )
-    ).scalar_one()
+        ordenes_abiertas = (
+            await db.execute(
+                select(func.count()).select_from(WorkOrder)
+                .where(WorkOrder.tenant_id == tid, WorkOrder.vehicle_id == vid,
+                       WorkOrder.status.in_(["abierta", "en_progreso"]))
+            )
+        ).scalar_one() if vid else 0
 
-    trips_planificados = (
-        await db.execute(
-            select(func.count())
-            .select_from(Trip)
-            .where(Trip.tenant_id == tid, Trip.status == "planificado")
-        )
-    ).scalar_one()
+        trips_en_curso = (
+            await db.execute(
+                select(func.count()).select_from(Trip)
+                .where(Trip.tenant_id == tid, Trip.driver_id == self_driver.id, Trip.status == "en_curso")
+            )
+        ).scalar_one()
 
-    choferes_activos = (
-        await db.execute(
-            select(func.count())
-            .select_from(Driver)
-            .where(Driver.tenant_id == tid, Driver.status == "activo")
-        )
-    ).scalar_one()
+        trips_pendientes = (
+            await db.execute(
+                select(func.count()).select_from(Trip)
+                .where(Trip.tenant_id == tid, Trip.driver_id == self_driver.id, Trip.status == "pendiente")
+            )
+        ).scalar_one()
+
+        trips_planificados = (
+            await db.execute(
+                select(func.count()).select_from(Trip)
+                .where(Trip.tenant_id == tid, Trip.driver_id == self_driver.id, Trip.status == "planificado")
+            )
+        ).scalar_one()
+
+        choferes_activos = 1 if self_driver.status == "activo" else 0
+
+    else:
+        vehicles_activos = (
+            await db.execute(
+                select(func.count()).select_from(Vehicle)
+                .where(Vehicle.tenant_id == tid, Vehicle.status != "baja")
+            )
+        ).scalar_one()
+
+        ordenes_abiertas = (
+            await db.execute(
+                select(func.count()).select_from(WorkOrder)
+                .where(WorkOrder.tenant_id == tid, WorkOrder.status.in_(["abierta", "en_progreso"]))
+            )
+        ).scalar_one()
+
+        trips_en_curso = (
+            await db.execute(
+                select(func.count()).select_from(Trip)
+                .where(Trip.tenant_id == tid, Trip.status == "en_curso")
+            )
+        ).scalar_one()
+
+        trips_pendientes = (
+            await db.execute(
+                select(func.count()).select_from(Trip)
+                .where(Trip.tenant_id == tid, Trip.status == "pendiente")
+            )
+        ).scalar_one()
+
+        trips_planificados = (
+            await db.execute(
+                select(func.count()).select_from(Trip)
+                .where(Trip.tenant_id == tid, Trip.status == "planificado")
+            )
+        ).scalar_one()
+
+        choferes_activos = (
+            await db.execute(
+                select(func.count()).select_from(Driver)
+                .where(Driver.tenant_id == tid, Driver.status == "activo")
+            )
+        ).scalar_one()
 
     return DashboardStats(
         vehicles_activos=vehicles_activos,

@@ -66,16 +66,23 @@ async def list_drivers(
 ) -> PaginatedResponse[DriverResponse]:
     base_filter = Driver.tenant_id == current_user.tenant_id
 
-    # Si el usuario tiene asignaciones de coordinador, restringir a su equipo
-    assigned = (await db.execute(
-        select(CoordinatorAssignment.driver_id).where(
-            CoordinatorAssignment.coordinator_user_id == current_user.id,
-            CoordinatorAssignment.tenant_id == current_user.tenant_id,
-        )
-    )).scalars().all()
+    self_driver = (await db.execute(
+        select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
 
-    if assigned:
-        base_filter = base_filter & Driver.id.in_(assigned)
+    if self_driver is not None:
+        # Chofer: solo puede ver su propio perfil
+        base_filter = base_filter & (Driver.id == self_driver.id)
+    else:
+        # Si el usuario tiene asignaciones de coordinador, restringir a su equipo
+        assigned = (await db.execute(
+            select(CoordinatorAssignment.driver_id).where(
+                CoordinatorAssignment.coordinator_user_id == current_user.id,
+                CoordinatorAssignment.tenant_id == current_user.tenant_id,
+            )
+        )).scalars().all()
+        if assigned:
+            base_filter = base_filter & Driver.id.in_(assigned)
 
     total = (
         await db.execute(select(func.count()).select_from(Driver).where(base_filter))
@@ -112,10 +119,15 @@ async def create_driver(body: DriverCreate, current_user: CurrentUser, db: DbSes
 
 @router.get("/{driver_id}", response_model=DriverResponse, dependencies=[_can_ver])
 async def get_driver(driver_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> Driver:
-    result = await db.execute(
-        select(Driver).where(Driver.id == driver_id, Driver.tenant_id == current_user.tenant_id)
-    )
-    driver = result.scalar_one_or_none()
+    query = select(Driver).where(Driver.id == driver_id, Driver.tenant_id == current_user.tenant_id)
+
+    self_driver = (await db.execute(
+        select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if self_driver is not None:
+        query = query.where(Driver.id == self_driver.id)
+
+    driver = (await db.execute(query)).scalar_one_or_none()
     if driver is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chofer no encontrado")
     return driver

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
+from app.models.driver import Driver
 from app.models.vehicle import Vehicle
 from app.schemas.common import PaginatedResponse
 from app.schemas.vehicle import VehicleCreate, VehicleResponse, VehicleUpdate
@@ -29,6 +30,15 @@ async def list_vehicles(
     """Lista los vehículos del tenant con paginación opcional y filtro por estado."""
     query = select(Vehicle).where(Vehicle.tenant_id == current_user.tenant_id)
     count_query = select(func.count()).select_from(Vehicle).where(Vehicle.tenant_id == current_user.tenant_id)
+
+    driver = (await db.execute(
+        select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if driver is not None:
+        if driver.vehicle_id is None:
+            return PaginatedResponse(items=[], total=0, page=page, size=size, pages=1)
+        query = query.where(Vehicle.id == driver.vehicle_id)
+        count_query = count_query.where(Vehicle.id == driver.vehicle_id)
 
     if status:
         query = query.where(Vehicle.status == status)
@@ -65,10 +75,15 @@ async def create_vehicle(
 @router.get("/{vehicle_id}", response_model=VehicleResponse, dependencies=[_can_ver])
 async def get_vehicle(vehicle_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> Vehicle:
     """Obtiene un vehículo por ID."""
-    result = await db.execute(
-        select(Vehicle).where(Vehicle.id == vehicle_id, Vehicle.tenant_id == current_user.tenant_id)
-    )
-    vehicle = result.scalar_one_or_none()
+    query = select(Vehicle).where(Vehicle.id == vehicle_id, Vehicle.tenant_id == current_user.tenant_id)
+
+    driver = (await db.execute(
+        select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if driver is not None:
+        query = query.where(Vehicle.id == driver.vehicle_id)
+
+    vehicle = (await db.execute(query)).scalar_one_or_none()
     if vehicle is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehículo no encontrado")
     return vehicle
