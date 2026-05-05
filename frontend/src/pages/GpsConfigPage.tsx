@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Satellite, CheckCircle, AlertCircle, Loader } from 'lucide-react'
 import { api } from '@/lib/api'
-import { usePermissions } from '@/hooks/usePermissions'
 
 interface GpsConfig {
   id: string
@@ -16,13 +15,10 @@ const CI = 'w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:out
 
 export default function GpsConfigPage() {
   const qc = useQueryClient()
-  const { can } = usePermissions()
   const [serverUrl, setServerUrl] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [saved, setSaved] = useState(false)
-  const [rawData, setRawData] = useState<string | null>(null)
-  const [rawLoading, setRawLoading] = useState(false)
 
   const { data: config, isLoading } = useQuery({
     queryKey: ['gps-config'],
@@ -79,39 +75,6 @@ export default function GpsConfigPage() {
                 <p className="text-xs text-amber-700 mt-0.5">Ingresá las credenciales para activar el mapa satelital</p>
               </div>
             </>
-          )}
-        </div>
-      )}
-
-      {/* Diagnóstico */}
-      {config && can('configuracion', 'editar') && (
-        <div className="mb-6 bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-3">Diagnóstico</h2>
-          <button
-            type="button"
-            disabled={rawLoading}
-            onClick={async () => {
-              setRawLoading(true)
-              setRawData(null)
-              try {
-                const r = await api.get('/gps/raw-fleet')
-                setRawData(JSON.stringify(r.data, null, 2))
-              } catch (e: unknown) {
-                const err = e as { response?: { data?: unknown }; message?: string }
-                setRawData(JSON.stringify(err?.response?.data ?? err?.message ?? 'Error desconocido', null, 2))
-              } finally {
-                setRawLoading(false)
-              }
-            }}
-            className="flex items-center gap-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
-          >
-            {rawLoading ? <Loader size={14} className="animate-spin" /> : null}
-            {rawLoading ? 'Consultando Powerfleet…' : 'Ver respuesta cruda de Powerfleet'}
-          </button>
-          {rawData && (
-            <pre className="mt-4 p-4 bg-gray-950 text-green-400 text-xs rounded-xl overflow-auto max-h-96 whitespace-pre-wrap break-all">
-              {rawData}
-            </pre>
           )}
         </div>
       )}
