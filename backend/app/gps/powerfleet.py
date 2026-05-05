@@ -151,6 +151,18 @@ async def get_vehicle_positions(
     return positions
 
 
+async def fetch_raw_fleet(base_url: str, username: str, password: str) -> dict:
+    """Retorna la respuesta cruda del endpoint de vehículos para diagnóstico."""
+    token, _ = await _authenticate(base_url, username, password)
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.get(
+            f"{base_url.rstrip('/')}/Fleetcore.api/api/fleetview/vehicles",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
 def invalidate_token_cache(config_id: str) -> None:
     """Limpia el token cacheado para forzar re-autenticación en el próximo request."""
     _token_cache.pop(config_id, None)

@@ -9,7 +9,7 @@ from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
 from app.models.gps import GpsConfig
 from app.models.vehicle import Vehicle
 from app.schemas.gps import GpsConfigCreate, GpsConfigResponse, VehiclePositionResponse
-from app.gps.powerfleet import validate_credentials, get_vehicle_positions, invalidate_token_cache
+from app.gps.powerfleet import validate_credentials, get_vehicle_positions, invalidate_token_cache, fetch_raw_fleet
 
 router = APIRouter(prefix="/gps", tags=["gps"])
 
@@ -92,6 +92,27 @@ async def save_gps_config(body: GpsConfigCreate, current_user: CurrentUser, db: 
         server_url=config.api_url,
         username=body.username,
     )
+
+
+@router.get("/raw-fleet", dependencies=[_can_editar])
+async def get_raw_fleet(current_user: CurrentUser, db: DbSession) -> dict:
+    """Devuelve la respuesta cruda de Powerfleet para diagnóstico."""
+    config = (await db.execute(
+        select(GpsConfig).where(
+            GpsConfig.tenant_id == current_user.tenant_id,
+            GpsConfig.provider == "powerfleet",
+            GpsConfig.is_active == True,  # noqa: E712
+        )
+    )).scalar_one_or_none()
+
+    if config is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="GPS no configurado.")
+
+    extra = config.extra_config or {}
+    try:
+        return await fetch_raw_fleet(config.api_url, extra["username"], extra["password"])
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
 
 
 @router.get("/positions", response_model=list[VehiclePositionResponse], dependencies=[_can_ver])
