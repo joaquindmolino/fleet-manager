@@ -39,6 +39,7 @@ export default defineConfig({
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\/api\//,
+            method: 'GET',
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
