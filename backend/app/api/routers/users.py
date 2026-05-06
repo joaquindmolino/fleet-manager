@@ -142,14 +142,15 @@ async def list_users(
 async def create_user(body: UserCreate, current_user: CurrentUser, db: DbSession) -> User:
     """Crea un nuevo usuario en el tenant del usuario autenticado."""
     existing = await db.execute(
-        select(User).where(User.email == body.email, User.tenant_id == current_user.tenant_id)
+        select(User).where(User.username == body.username, User.tenant_id == current_user.tenant_id)
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El email ya está registrado")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ese nombre de usuario ya está en uso")
 
     user = User(
         tenant_id=current_user.tenant_id,
-        email=body.email,
+        username=body.username,
+        email=body.email or None,
         full_name=body.full_name,
         hashed_password=hash_password(body.password),
         role_id=body.role_id,

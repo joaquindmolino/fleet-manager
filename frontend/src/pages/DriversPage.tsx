@@ -16,7 +16,7 @@ const STATUS_COLOR: Record<string, string> = {
   baja: 'bg-gray-100 text-gray-500',
 }
 
-interface UserPicker { id: string; full_name: string; email: string; is_active: boolean }
+interface UserPicker { id: string; full_name: string; username: string; email: string | null; is_active: boolean }
 
 function licenseExpiryInfo(expiry: string | null): { label: string; color: string; warn: boolean } {
   if (!expiry) return { label: '—', color: 'text-gray-400', warn: false }
@@ -167,7 +167,7 @@ export default function DriversPage() {
                   <td className="px-3 py-2">
                     <select form="add-d" value={addForm.user_id} onChange={e => af('user_id', e.target.value)} className={CS}>
                       <option value="">Sin usuario</option>
-                      {availableUsers.map(u => <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>)}
+                      {availableUsers.map(u => <option key={u.id} value={u.id}>{u.full_name} ({u.username})</option>)}
                     </select>
                   </td>
                   <td className="px-3 py-2 text-gray-400 text-xs">Activo</td>
@@ -212,7 +212,7 @@ export default function DriversPage() {
                           <option value="">Sin usuario</option>
                           {(userPickers ?? [])
                             .filter(u2 => !assignedUserIds.has(u2.id) || u2.id === d.user_id)
-                            .map(u2 => <option key={u2.id} value={u2.id}>{u2.full_name} ({u2.email})</option>)}
+                            .map(u2 => <option key={u2.id} value={u2.id}>{u2.full_name} ({u2.username})</option>)}
                         </select>
                       </td>
                       <td className="px-3 py-2">
@@ -285,7 +285,7 @@ export default function DriversPage() {
               </select>
               <select value={addForm.user_id} onChange={e => af('user_id', e.target.value)} className={CS}>
                 <option value="">Sin usuario de acceso</option>
-                {availableUsers.map(u => <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>)}
+                {availableUsers.map(u => <option key={u.id} value={u.id}>{u.full_name} ({u.username})</option>)}
               </select>
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={isPending} className="flex-1 bg-blue-600 text-white text-sm font-medium py-2 rounded-lg disabled:opacity-50">Guardar</button>
@@ -324,7 +324,7 @@ export default function DriversPage() {
                   <option value="">Sin usuario de acceso</option>
                   {(userPickers ?? [])
                     .filter(u2 => !assignedUserIds.has(u2.id) || u2.id === d.user_id)
-                    .map(u2 => <option key={u2.id} value={u2.id}>{u2.full_name} ({u2.email})</option>)}
+                    .map(u2 => <option key={u2.id} value={u2.id}>{u2.full_name} ({u2.username})</option>)}
                 </select>
                 <select value={editForm.status} onChange={e => ef('status', e.target.value)} className={CS}>
                   <option value="activo">Activo</option>

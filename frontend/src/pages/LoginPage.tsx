@@ -11,7 +11,7 @@ export default function LoginPage() {
   const [step, setStep] = useState<1 | 2>(1)
   const [slug, setSlug] = useState('')
   const [tenantName, setTenantName] = useState('')
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -36,10 +36,10 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(slug, email, password)
+      await login(slug, username, password)
       navigate('/dashboard')
     } catch {
-      setError('Email o contraseña incorrectos')
+      setError('Usuario o contraseña incorrectos')
     } finally {
       setLoading(false)
     }
@@ -47,7 +47,7 @@ export default function LoginPage() {
 
   function handleBack() {
     setStep(1)
-    setEmail('')
+    setUsername('')
     setPassword('')
     setError('')
   }
@@ -116,18 +116,18 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
               <input
-                type="email"
+                type="text"
                 required
                 autoFocus
-                autoComplete="email"
+                autoComplete="username"
                 autoCapitalize="none"
                 autoCorrect="off"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="usuario@empresa.com"
+                placeholder="usuario"
               />
             </div>
 

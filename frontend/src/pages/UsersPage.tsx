@@ -10,8 +10,8 @@ import type { PaginatedResponse, User, Role, UserPermissionOverride, Driver, Veh
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
 const CS = CI + ' bg-white'
 
-interface UF { full_name: string; email: string; password: string; role_id: string }
-const EMPTY: UF = { full_name: '', email: '', password: '', role_id: '' }
+interface UF { username: string; full_name: string; email: string; password: string; role_id: string }
+const EMPTY: UF = { username: '', full_name: '', email: '', password: '', role_id: '' }
 interface PasswordForm { password: string; confirm: string }
 
 const MODULES = [
@@ -401,7 +401,7 @@ export default function UsersPage() {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<Omit<UF, 'password'>>({ full_name: '', email: '', role_id: '' })
+  const [editForm, setEditForm] = useState<Omit<UF, 'password'>>({ username: '', full_name: '', email: '', role_id: '' })
   const [addingRow, setAddingRow] = useState(false)
   const [addForm, setAddForm] = useState<UF>(EMPTY)
   const [addError, setAddError] = useState('')
@@ -448,7 +448,7 @@ export default function UsersPage() {
 
   function startEdit(u: User) {
     setAddingRow(false); setEditingId(u.id)
-    setEditForm({ full_name: u.full_name, email: u.email, role_id: u.role_id ?? '' })
+    setEditForm({ username: u.username, full_name: u.full_name, email: u.email ?? '', role_id: u.role_id ?? '' })
   }
   function ef(k: keyof typeof editForm, v: string) { setEditForm(p => ({ ...p, [k]: v })) }
   function af(k: keyof UF, v: string) { setAddForm(p => ({ ...p, [k]: v })) }
@@ -487,7 +487,7 @@ export default function UsersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                {['Nombre', 'Email', 'Contraseña', 'Rol', 'Estado', ''].map(h => (
+                {['Usuario', 'Nombre', 'Email', 'Contraseña', 'Rol', 'Estado', ''].map(h => (
                   <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -496,8 +496,9 @@ export default function UsersPage() {
               {addingRow && (
                 <>
                 <tr className={addRow}>
-                  <td className="px-3 py-2"><input value={addForm.full_name} onChange={e => af('full_name', e.target.value)} placeholder="Nombre *" className={CI} /></td>
-                  <td className="px-3 py-2"><input type="email" value={addForm.email} onChange={e => af('email', e.target.value)} placeholder="email@empresa.com *" className={CI} /></td>
+                  <td className="px-3 py-2"><input value={addForm.username} onChange={e => af('username', e.target.value)} placeholder="usuario *" className={CI} /></td>
+                  <td className="px-3 py-2"><input value={addForm.full_name} onChange={e => af('full_name', e.target.value)} placeholder="Nombre completo *" className={CI} /></td>
+                  <td className="px-3 py-2"><input type="email" value={addForm.email} onChange={e => af('email', e.target.value)} placeholder="email (opcional)" className={CI} /></td>
                   <td className="px-3 py-2"><input type="password" value={addForm.password} onChange={e => { af('password', e.target.value); setAddError('') }} placeholder="Mínimo 6 caracteres *" className={CI} /></td>
                   <td className="px-3 py-2">
                     <select value={addForm.role_id} onChange={e => af('role_id', e.target.value)} className={CS}>
@@ -512,11 +513,11 @@ export default function UsersPage() {
                         type="button"
                         disabled={isPending}
                         onClick={() => {
+                          if (!addForm.username.trim()) { setAddError('El usuario es obligatorio.'); return }
                           if (!addForm.full_name.trim()) { setAddError('El nombre es obligatorio.'); return }
-                          if (!addForm.email.trim()) { setAddError('El email es obligatorio.'); return }
                           if (addForm.password.length < 6) { setAddError('La contraseña debe tener al menos 6 caracteres.'); return }
                           setAddError('')
-                          createMutation.mutate({ full_name: addForm.full_name, email: addForm.email, password: addForm.password, role_id: addForm.role_id || null })
+                          createMutation.mutate({ username: addForm.username.trim(), full_name: addForm.full_name, email: addForm.email.trim() || null, password: addForm.password, role_id: addForm.role_id || null })
                         }}
                         className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
                       >{createMutation.isPending ? 'Guardando...' : 'Guardar'}</button>
@@ -526,7 +527,7 @@ export default function UsersPage() {
                 </tr>
                 {addError && (
                   <tr className={addRow}>
-                    <td colSpan={6} className="px-3 pb-2">
+                    <td colSpan={7} className="px-3 pb-2">
                       <p className="text-xs text-red-600">{addError}</p>
                     </td>
                   </tr>
@@ -535,16 +536,17 @@ export default function UsersPage() {
               )}
 
               {data?.items.length === 0 && !addingRow
-                ? <tr><td colSpan={6} className="p-12 text-center"><UserCog size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay usuarios registrados.</p></td></tr>
+                ? <tr><td colSpan={7} className="p-12 text-center"><UserCog size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay usuarios registrados.</p></td></tr>
                 : data?.items.map(u => {
                   const isMe = u.id === me?.id
                   const role = u.role_id ? roleMap[u.role_id] : null
                   const hasOverrides = (u.permission_overrides?.length ?? 0) > 0
                   return editingId === u.id ? (
                     <tr key={u.id} className={editRow}>
-                      <form id={`e-${u.id}`} onSubmit={e => { e.preventDefault(); updateMutation.mutate({ id: u.id, body: { full_name: editForm.full_name, email: editForm.email, role_id: editForm.role_id || null } }) }} />
+                      <form id={`e-${u.id}`} onSubmit={e => { e.preventDefault(); updateMutation.mutate({ id: u.id, body: { username: editForm.username.trim(), full_name: editForm.full_name, email: editForm.email.trim() || null, role_id: editForm.role_id || null } }) }} />
+                      <td className="px-3 py-2"><input form={`e-${u.id}`} required value={editForm.username} onChange={e => ef('username', e.target.value)} className={CI} /></td>
                       <td className="px-3 py-2"><input form={`e-${u.id}`} required value={editForm.full_name} onChange={e => ef('full_name', e.target.value)} className={CI} /></td>
-                      <td className="px-3 py-2"><input form={`e-${u.id}`} required type="email" value={editForm.email} onChange={e => ef('email', e.target.value)} className={CI} /></td>
+                      <td className="px-3 py-2"><input form={`e-${u.id}`} type="email" value={editForm.email} onChange={e => ef('email', e.target.value)} placeholder="(opcional)" className={CI} /></td>
                       <td className="px-3 py-2 text-gray-400 text-xs">—</td>
                       <td className="px-3 py-2">
                         <select form={`e-${u.id}`} value={editForm.role_id} onChange={e => ef('role_id', e.target.value)} className={CS}>
@@ -562,12 +564,13 @@ export default function UsersPage() {
                     </tr>
                   ) : (
                     <tr key={u.id} className={row}>
+                      <td className="px-3 py-3 font-mono text-sm text-gray-700">{u.username}</td>
                       <td className="px-3 py-3 font-medium text-gray-900">
                         {u.full_name}
                         {u.is_superadmin && <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-700 font-medium"><ShieldAlert size={10} /> Admin</span>}
                         {isMe && <span className="ml-2 text-xs text-gray-400">(vos)</span>}
                       </td>
-                      <td className="px-3 py-3 text-gray-500">{u.email}</td>
+                      <td className="px-3 py-3 text-gray-500 text-sm">{u.email ?? <span className="text-gray-300">—</span>}</td>
                       <td className="px-3 py-3">
                         <button onClick={() => { setPasswordTarget(u); setPasswordForm({ password: '', confirm: '' }); setPasswordError('') }} title="Cambiar contraseña" className="text-gray-400 hover:text-gray-700 transition-colors">
                           <KeyRound size={14} />

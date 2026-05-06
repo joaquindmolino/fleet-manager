@@ -1,6 +1,6 @@
 """Schemas de autenticación: login, tokens, registro."""
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class TenantCheckResponse(BaseModel):
@@ -10,7 +10,7 @@ class TenantCheckResponse(BaseModel):
 
 class LoginRequest(BaseModel):
     tenant_slug: str
-    email: EmailStr
+    username: str
     password: str
 
 

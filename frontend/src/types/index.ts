@@ -21,7 +21,8 @@ export interface User {
   role_id: string | null
   role: Role | null
   permission_overrides: UserPermissionOverride[]
-  email: string
+  username: string
+  email: string | null
   full_name: string
   is_active: boolean
   is_superadmin: boolean

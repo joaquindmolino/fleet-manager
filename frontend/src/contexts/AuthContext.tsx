@@ -15,7 +15,7 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  login: (tenantSlug: string, email: string, password: string) => Promise<void>
+  login: (tenantSlug: string, username: string, password: string) => Promise<void>
   logout: () => void
   refreshUser: () => Promise<void>
   impersonate: (tenantId: string, tenantName: string) => Promise<void>
@@ -52,10 +52,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetchUser(imp ? (JSON.parse(imp) as Impersonation) : null)
   }, [])
 
-  async function login(tenantSlug: string, email: string, password: string) {
+  async function login(tenantSlug: string, username: string, password: string) {
     const res = await api.post<{ access_token: string }>('/auth/login', {
       tenant_slug: tenantSlug.trim().toLowerCase(),
-      email: email.trim().toLowerCase(),
+      username: username.trim(),
       password: password.trim(),
     })
     localStorage.setItem('access_token', res.data.access_token)

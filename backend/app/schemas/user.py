@@ -39,7 +39,8 @@ class UserResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
     role_id: uuid.UUID | None
-    email: EmailStr
+    username: str
+    email: str | None
     full_name: str
     is_active: bool
     is_superadmin: bool
@@ -54,13 +55,15 @@ class UserResponse(BaseModel):
 
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    username: str
+    email: EmailStr | None = None
     full_name: str
     password: str
     role_id: uuid.UUID | None = None
 
 
 class UserUpdate(BaseModel):
+    username: str | None = None
     full_name: str | None = None
     email: EmailStr | None = None
     role_id: uuid.UUID | None = None
@@ -92,7 +95,8 @@ class RolePermissionsUpdate(BaseModel):
 class UserPickerResponse(BaseModel):
     id: uuid.UUID
     full_name: str
-    email: str
+    username: str
+    email: str | None
     is_active: bool
 
     model_config = {"from_attributes": True}
