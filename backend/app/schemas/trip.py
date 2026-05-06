@@ -8,8 +8,8 @@ from app.models.trip import EstadoViaje
 
 
 class TripBase(BaseModel):
-    origin: str
-    destination: str
+    origin: str = ""
+    destination: str = ""
     start_odometer: int | None = None
     notes: str | None = None
     associated_document: str | None = None

@@ -21,10 +21,10 @@ const STATUS_COLOR: Record<string, string> = {
   cancelado: 'bg-gray-100 text-gray-400',
 }
 
-interface TF { vehicle_id: string; driver_id: string; client_id: string; origin: string; destination: string; start_odometer: string; scheduled_date: string }
-const EMPTY: TF = { vehicle_id: '', driver_id: '', client_id: '', origin: '', destination: '', start_odometer: '', scheduled_date: '' }
+interface TF { vehicle_id: string; driver_id: string; client_id: string; associated_document: string; stops_count: string; start_odometer: string; scheduled_date: string; notes: string }
+const EMPTY: TF = { vehicle_id: '', driver_id: '', client_id: '', associated_document: '', stops_count: '', start_odometer: '', scheduled_date: '', notes: '' }
 
-interface EF { origin: string; destination: string; end_odometer: string }
+interface EF { associated_document: string; notes: string; end_odometer: string }
 
 interface CompleteModal { trip: Trip; end_odometer: string }
 
@@ -42,6 +42,7 @@ export default function TripsPage() {
   const [addForm, setAddForm] = useState<TF>(EMPTY)
   const [completeModal, setCompleteModal] = useState<CompleteModal | null>(null)
   const [startingId, setStartingId] = useState<string | null>(null)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['trips', page],
@@ -83,9 +84,19 @@ export default function TripsPage() {
     onError: () => setStartingId(null),
   })
 
+  const cancelMutation = useMutation({
+    mutationFn: (tripId: string) => api.patch(`/trips/${tripId}`, { status: 'cancelado' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trips'] })
+      qc.invalidateQueries({ queryKey: ['stats'] })
+      setCancellingId(null)
+    },
+    onError: () => setCancellingId(null),
+  })
+
   function startEdit(t: Trip) {
     setAddingRow(false); setEditingId(t.id)
-    setEditForm({ origin: t.origin, destination: t.destination, end_odometer: t.end_odometer?.toString() ?? '' })
+    setEditForm({ associated_document: t.associated_document ?? '', notes: t.notes ?? '', end_odometer: t.end_odometer?.toString() ?? '' })
   }
   function ef(k: keyof EF, v: string) { setEditForm(p => ({ ...p, [k]: v })) }
   function af(k: keyof TF, v: string) { setAddForm(p => ({ ...p, [k]: v })) }
@@ -145,7 +156,7 @@ export default function TripsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                {['Origen', 'Destino', 'Cliente', 'Vehículo', 'Conductor', 'Fecha', 'Estado', ''].map(h => (
+                {['Documento', 'Cliente', 'Conductor / Vehículo', 'Fecha', 'Paradas', 'Km odóm.', 'Observaciones', 'Estado', ''].map(h => (
                   <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -160,14 +171,14 @@ export default function TripsPage() {
                       vehicle_id: addForm.vehicle_id,
                       driver_id: addForm.driver_id || null,
                       client_id: addForm.client_id || null,
-                      origin: addForm.origin,
-                      destination: addForm.destination,
+                      associated_document: addForm.associated_document || null,
+                      stops_count: addForm.stops_count ? parseInt(addForm.stops_count) : null,
                       start_odometer: addForm.start_odometer ? parseInt(addForm.start_odometer) : null,
                       scheduled_date: addForm.scheduled_date || null,
+                      notes: addForm.notes || null,
                     })
                   }} />
-                  <td className="px-3 py-2"><input form="add-tr" required value={addForm.origin} onChange={e => af('origin', e.target.value)} placeholder="Origen *" className={CI} /></td>
-                  <td className="px-3 py-2"><input form="add-tr" required value={addForm.destination} onChange={e => af('destination', e.target.value)} placeholder="Destino *" className={CI} /></td>
+                  <td className="px-3 py-2"><input form="add-tr" value={addForm.associated_document} onChange={e => af('associated_document', e.target.value)} placeholder="Nro. documento" className={CI} /></td>
                   <td className="px-3 py-2">
                     <select form="add-tr" value={addForm.client_id} onChange={e => af('client_id', e.target.value)} className={CS}>
                       <option value="">— Cliente</option>
@@ -179,15 +190,15 @@ export default function TripsPage() {
                       <option value="">— Vehículo *</option>
                       {activeVehicles.map(v => <option key={v.id} value={v.id}>{v.plate} — {v.brand} {v.model}</option>)}
                     </select>
-                    <input form="add-tr" type="number" min="0" value={addForm.start_odometer} onChange={e => af('start_odometer', e.target.value)} placeholder="Km inicial" className={`${CI} mt-1`} />
-                  </td>
-                  <td className="px-3 py-2">
-                    <select form="add-tr" value={addForm.driver_id} onChange={e => af('driver_id', e.target.value)} className={CS}>
+                    <select form="add-tr" value={addForm.driver_id} onChange={e => af('driver_id', e.target.value)} className={`${CS} mt-1`}>
                       <option value="">Sin conductor</option>
                       {activeDrivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
                     </select>
                   </td>
                   <td className="px-3 py-2"><input form="add-tr" type="date" value={addForm.scheduled_date} onChange={e => af('scheduled_date', e.target.value)} className={CI} /></td>
+                  <td className="px-3 py-2"><input form="add-tr" type="number" min="0" value={addForm.stops_count} onChange={e => af('stops_count', e.target.value)} placeholder="Cant." className={CI} /></td>
+                  <td className="px-3 py-2"><input form="add-tr" type="number" min="0" value={addForm.start_odometer} onChange={e => af('start_odometer', e.target.value)} placeholder="Km inicial" className={CI} /></td>
+                  <td className="px-3 py-2"><input form="add-tr" value={addForm.notes} onChange={e => af('notes', e.target.value)} placeholder="Observaciones" className={CI} /></td>
                   <td className="px-3 py-2 text-gray-400 text-xs">Planificado</td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
@@ -199,22 +210,27 @@ export default function TripsPage() {
               )}
 
               {data?.items.length === 0 && !addingRow
-                ? <tr><td colSpan={8} className="p-12 text-center"><Route size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay viajes registrados.</p></td></tr>
+                ? <tr><td colSpan={9} className="p-12 text-center"><Route size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay viajes registrados.</p></td></tr>
                 : data?.items.map(t => {
                   const v = vehicleMap[t.vehicle_id]
                   const d = t.driver_id ? driverMap[t.driver_id] : null
+                  const clientName = t.client_id ? (clientMap[t.client_id]?.name ?? '—') : '—'
                   return editingId === t.id ? (
                     <tr key={t.id} className={editRow}>
-                      <form id={`e-${t.id}`} onSubmit={e => { e.preventDefault(); updateMutation.mutate({ id: t.id, body: { origin: editForm.origin, destination: editForm.destination, end_odometer: editForm.end_odometer ? parseInt(editForm.end_odometer) : null } }) }} />
-                      <td className="px-3 py-2"><input form={`e-${t.id}`} required value={editForm.origin} onChange={e => ef('origin', e.target.value)} className={CI} /></td>
-                      <td className="px-3 py-2"><input form={`e-${t.id}`} required value={editForm.destination} onChange={e => ef('destination', e.target.value)} className={CI} /></td>
-                      <td className="px-3 py-2 text-gray-400 text-xs">{t.client_id ? (clientMap[t.client_id]?.name ?? '—') : '—'}</td>
-                      <td className="px-3 py-2 text-gray-400 font-mono text-xs">{v ? v.plate : '—'}</td>
-                      <td className="px-3 py-2 text-gray-400 text-xs">{d?.full_name ?? '—'}</td>
+                      <form id={`e-${t.id}`} onSubmit={e => { e.preventDefault(); updateMutation.mutate({ id: t.id, body: { associated_document: editForm.associated_document || null, notes: editForm.notes || null, end_odometer: editForm.end_odometer ? parseInt(editForm.end_odometer) : null } }) }} />
+                      <td className="px-3 py-2"><input form={`e-${t.id}`} value={editForm.associated_document} onChange={e => ef('associated_document', e.target.value)} placeholder="Nro. documento" className={CI} /></td>
+                      <td className="px-3 py-2 text-gray-400 text-xs">{clientName}</td>
+                      <td className="px-3 py-2 text-gray-400 text-xs">
+                        <div className="font-medium">{d?.full_name ?? '—'}</div>
+                        <div className="font-mono text-[11px] text-gray-300">{v?.plate ?? '—'}</div>
+                      </td>
                       <td className="px-3 py-2 text-gray-400 text-xs">
                         <div>{formatDate(t)}</div>
-                        {dateLabel(t) && <div className="text-gray-400 text-[10px] mt-0.5">{dateLabel(t)}</div>}
+                        {dateLabel(t) && <div className="text-[10px] mt-0.5">{dateLabel(t)}</div>}
                       </td>
+                      <td className="px-3 py-2 text-gray-400 text-xs text-center">{t.stops_count ?? '—'}</td>
+                      <td className="px-3 py-2"><input form={`e-${t.id}`} type="number" min="0" value={editForm.end_odometer} onChange={e => ef('end_odometer', e.target.value)} placeholder="Km final" className={CI} /></td>
+                      <td className="px-3 py-2"><input form={`e-${t.id}`} value={editForm.notes} onChange={e => ef('notes', e.target.value)} placeholder="Observaciones" className={CI} /></td>
                       <td className="px-3 py-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[t.status] ?? 'bg-gray-100 text-gray-500'}`}>{STATUS_LABEL[t.status] ?? t.status}</span></td>
                       <td className="px-3 py-2">
                         <div className="flex gap-1">
@@ -226,38 +242,54 @@ export default function TripsPage() {
                   ) : (
                     <tr key={t.id} className={row}>
                       <td className="px-3 py-3 font-medium text-gray-900">
-                        <Link to={`/trips/${t.id}`} className="hover:text-blue-600 transition-colors">{t.origin}</Link>
+                        <Link to={`/trips/${t.id}`} className="hover:text-blue-600 transition-colors">
+                          {t.associated_document ?? <span className="text-gray-400 font-normal text-xs">Sin documento</span>}
+                        </Link>
                       </td>
-                      <td className="px-3 py-3 font-medium text-gray-900">
-                        <Link to={`/trips/${t.id}`} className="hover:text-blue-600 transition-colors">{t.destination}</Link>
+                      <td className="px-3 py-3 text-gray-500 text-xs">{clientName}</td>
+                      <td className="px-3 py-3 text-xs">
+                        <div className="text-gray-700 font-medium">{d?.full_name ?? '—'}</div>
+                        <div className="font-mono text-gray-400 text-[11px] mt-0.5">{v?.plate ?? '—'}</div>
                       </td>
-                      <td className="px-3 py-3 text-gray-500 text-xs">{t.client_id ? (clientMap[t.client_id]?.name ?? '—') : '—'}</td>
-                      <td className="px-3 py-3 text-gray-700 font-mono text-xs">{v ? v.plate : '—'}</td>
-                      <td className="px-3 py-3 text-gray-500">{d?.full_name ?? '—'}</td>
                       <td className="px-3 py-3 text-gray-500 text-xs">
                         <div>{formatDate(t)}</div>
                         {dateLabel(t) && <div className="text-gray-400 text-[10px] mt-0.5">{dateLabel(t)}</div>}
                       </td>
+                      <td className="px-3 py-3 text-gray-500 text-xs text-center">{t.stops_count ?? '—'}</td>
+                      <td className="px-3 py-3 text-gray-500 text-xs font-mono">
+                        {t.end_odometer ? `${t.end_odometer.toLocaleString()} km` : t.start_odometer ? `${t.start_odometer.toLocaleString()} km` : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-gray-400 text-xs max-w-[140px] truncate" title={t.notes ?? ''}>
+                        {t.notes ? (t.notes.length > 40 ? t.notes.slice(0, 40) + '…' : t.notes) : '—'}
+                      </td>
                       <td className="px-3 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[t.status] ?? 'bg-gray-100 text-gray-500'}`}>{STATUS_LABEL[t.status] ?? t.status}</span></td>
                       <td className="px-3 py-3">
-                        <div className="flex items-center justify-end gap-3">
-                          {t.status === 'pendiente' && (
+                        <div className="flex items-center justify-end gap-2 flex-wrap">
+                          {t.status === 'planificado' && (
                             <button
                               onClick={() => { setStartingId(t.id); startMutation.mutate(t.id) }}
                               disabled={startingId === t.id}
                               className="flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium px-2.5 py-1.5 rounded-lg transition-colors"
                             >
-                              {startingId === t.id
-                                ? <Loader2 size={12} className="animate-spin" />
-                                : <Play size={12} />
-                              }
+                              {startingId === t.id ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
                               Iniciar
                             </button>
                           )}
                           {t.status === 'en_curso' && (
                             <button onClick={() => setCompleteModal({ trip: t, end_odometer: '' })} className="text-xs text-green-600 hover:text-green-800 font-medium">Completar</button>
                           )}
-                          <button onClick={() => startEdit(t)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button>
+                          {['planificado', 'pendiente', 'en_curso'].includes(t.status) && (
+                            <button
+                              onClick={() => { if (window.confirm('¿Cancelar este viaje?')) { setCancellingId(t.id); cancelMutation.mutate(t.id) } }}
+                              disabled={cancellingId === t.id}
+                              className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
+                            >
+                              {cancellingId === t.id ? 'Cancelando…' : 'Cancelar'}
+                            </button>
+                          )}
+                          {t.status !== 'cancelado' && (
+                            <button onClick={() => startEdit(t)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button>
+                          )}
                         </div>
                       </td>
                     </tr>
