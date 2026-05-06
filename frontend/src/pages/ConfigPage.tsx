@@ -173,58 +173,60 @@ function AlertEmailsTab() {
           <p className="text-sm text-gray-400">No hay emails adicionales configurados.</p>
         </div>
       ) : (
-        <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
-          {/* Header */}
-          <div className="grid grid-cols-[1fr_repeat(5,_auto)_auto] gap-x-4 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
-            <span>Email</span>
-            {NOTIF_TYPES.map(nt => (
-              <span key={nt.key} className="text-center whitespace-nowrap">{nt.label}</span>
-            ))}
-            <span></span>
-          </div>
-          {/* Rows */}
-          <div className="divide-y divide-gray-100">
+        <table className="w-full text-xs border border-gray-200 rounded-xl overflow-hidden bg-white">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <th className="text-left px-4 py-2 font-semibold text-gray-500">Email</th>
+              {NOTIF_TYPES.map(nt => (
+                <th key={nt.key} className="px-4 py-2 text-center font-semibold text-gray-500 whitespace-nowrap">{nt.label}</th>
+              ))}
+              <th className="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
             {alertEmails.map(ae => (
-              <div key={ae.id} className="grid grid-cols-[1fr_repeat(5,_auto)_auto] gap-x-4 items-center px-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{ae.email}</p>
-                  {ae.label && <p className="text-xs text-gray-400 mt-0.5 truncate">{ae.label}</p>}
-                </div>
+              <tr key={ae.id}>
+                <td className="px-4 py-3">
+                  <p className="text-sm font-medium text-gray-800">{ae.email}</p>
+                  {ae.label && <p className="text-xs text-gray-400 mt-0.5">{ae.label}</p>}
+                </td>
                 {NOTIF_TYPES.map(nt => {
                   const active = ae[nt.key]
                   return (
-                    <div key={nt.key} className="flex justify-center">
+                    <td key={nt.key} className="px-4 py-3 text-center">
                       <button
                         type="button"
                         title={`${nt.label}: ${active ? 'activado' : 'desactivado'}`}
                         onClick={() => patchMutation.mutate({ id: ae.id, field: nt.key, value: !active })}
                         disabled={patchMutation.isPending}
-                        className={`w-6 h-6 rounded flex items-center justify-center transition-colors disabled:opacity-40 ${
+                        className={`w-6 h-6 rounded flex items-center justify-center mx-auto transition-colors disabled:opacity-40 ${
                           active
                             ? 'bg-green-500 hover:bg-green-600'
-                            : 'border border-gray-200 hover:border-gray-300 hover:bg-gray-100'
+                            : 'border border-gray-400 hover:border-gray-500 hover:bg-gray-100'
                         }`}
                       >
                         {active
                           ? <Check size={11} className="text-white" />
-                          : <Minus size={11} className="text-gray-300" />
+                          : <Minus size={11} className="text-gray-400" />
                         }
                       </button>
-                    </div>
+                    </td>
                   )
                 })}
-                <button
-                  onClick={() => deleteMutation.mutate(ae.id)}
-                  disabled={deleteMutation.isPending}
-                  className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-40"
-                  title="Eliminar"
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => deleteMutation.mutate(ae.id)}
+                    disabled={deleteMutation.isPending}
+                    className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
+                    title="Eliminar"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </td>
+              </tr>
             ))}
-          </div>
-        </div>
+          </tbody>
+        </table>
       )}
     </div>
   )
