@@ -484,11 +484,21 @@ export default function UsersPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? <div className="p-12 text-center text-gray-400 text-sm">Cargando...</div> : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm" style={{ minWidth: '860px' }}>
+            <colgroup>
+              <col style={{ width: '160px' }} />
+              <col style={{ width: '180px' }} />
+              <col style={{ width: '190px' }} />
+              <col style={{ width: '48px'  }} />
+              <col style={{ width: '150px' }} />
+              <col style={{ width: '90px'  }} />
+              <col style={{ width: '42px'  }} />
+            </colgroup>
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                {['Usuario', 'Nombre', 'Email', 'Contraseña', 'Rol', 'Estado', ''].map(h => (
-                  <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                {['Usuario', 'Nombre', 'Email', 'Clave', 'Rol', 'Estado', ''].map(h => (
+                  <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -564,13 +574,15 @@ export default function UsersPage() {
                     </tr>
                   ) : (
                     <tr key={u.id} className={row}>
-                      <td className="px-3 py-3 font-mono text-sm text-gray-700">{u.username}</td>
-                      <td className="px-3 py-3 font-medium text-gray-900">
-                        {u.full_name}
-                        {u.is_superadmin && <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-700 font-medium"><ShieldAlert size={10} /> Admin</span>}
-                        {isMe && <span className="ml-2 text-xs text-gray-400">(vos)</span>}
+                      <td className="px-3 py-3 max-w-0"><p className="font-mono text-sm text-gray-700 truncate">{u.username}</p></td>
+                      <td className="px-3 py-3 max-w-0">
+                        <p className="font-medium text-gray-900 truncate">
+                          {u.full_name}
+                          {u.is_superadmin && <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-700 font-medium"><ShieldAlert size={10} /> Admin</span>}
+                          {isMe && <span className="ml-2 text-xs text-gray-400">(vos)</span>}
+                        </p>
                       </td>
-                      <td className="px-3 py-3 text-gray-500 text-sm">{u.email ?? <span className="text-gray-300">—</span>}</td>
+                      <td className="px-3 py-3 max-w-0"><p className="text-gray-500 text-sm truncate">{u.email ?? <span className="text-gray-300">—</span>}</p></td>
                       <td className="px-3 py-3">
                         <button onClick={() => { setPasswordTarget(u); setPasswordForm({ password: '', confirm: '' }); setPasswordError('') }} title="Cambiar contraseña" className="text-gray-400 hover:text-gray-700 transition-colors">
                           <KeyRound size={14} />
@@ -626,6 +638,7 @@ export default function UsersPage() {
               }
             </tbody>
           </table>
+          </div>
         )}
         {data && data.pages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
