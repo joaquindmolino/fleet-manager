@@ -4,6 +4,16 @@ import { Check, Minus, ShieldCheck, Mail, Trash2, Plus } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { Role } from '@/types'
 
+const NOTIF_TYPES = [
+  { key: 'tipo_mantenimiento',    label: 'Mantenimiento' },
+  { key: 'tipo_resumen_viajes',   label: 'Resumen viajes' },
+  { key: 'tipo_viaje_asignado',   label: 'Viaje asignado' },
+  { key: 'tipo_viaje_iniciado',   label: 'Viaje iniciado' },
+  { key: 'tipo_viaje_completado', label: 'Viaje completado' },
+] as const
+
+type NotifKey = typeof NOTIF_TYPES[number]['key']
+
 const MODULES = [
   { key: 'vehiculos',       label: 'Vehículos',          note: '',                sub: false },
   { key: 'conductores',     label: 'Conductores',         note: '',                sub: false },
@@ -29,7 +39,16 @@ const ACTIONS = [
   { key: 'eliminar', label: 'Eliminar' },
 ]
 
-interface AlertEmailRecord { id: string; email: string; label: string | null }
+interface AlertEmailRecord {
+  id: string
+  email: string
+  label: string | null
+  tipo_mantenimiento:    boolean
+  tipo_resumen_viajes:   boolean
+  tipo_viaje_asignado:   boolean
+  tipo_viaje_iniciado:   boolean
+  tipo_viaje_completado: boolean
+}
 
 function buildPermSet(role: Role): Set<string> {
   const s = new Set<string>()
@@ -44,6 +63,13 @@ function AlertEmailsTab() {
   const qc = useQueryClient()
   const [emailInput, setEmailInput] = useState('')
   const [labelInput, setLabelInput] = useState('')
+  const [newTypes, setNewTypes] = useState<Record<NotifKey, boolean>>({
+    tipo_mantenimiento:    true,
+    tipo_resumen_viajes:   false,
+    tipo_viaje_asignado:   false,
+    tipo_viaje_iniciado:   false,
+    tipo_viaje_completado: false,
+  })
   const [formError, setFormError] = useState<string | null>(null)
 
   const { data: alertEmails = [], isLoading } = useQuery({
@@ -52,16 +78,24 @@ function AlertEmailsTab() {
   })
 
   const addMutation = useMutation({
-    mutationFn: (body: { email: string; label?: string }) => api.post('/alert-emails', body),
+    mutationFn: (body: { email: string; label?: string } & Record<NotifKey, boolean>) =>
+      api.post('/alert-emails', body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['alert-emails'] })
       setEmailInput('')
       setLabelInput('')
+      setNewTypes({ tipo_mantenimiento: true, tipo_resumen_viajes: false, tipo_viaje_asignado: false, tipo_viaje_iniciado: false, tipo_viaje_completado: false })
       setFormError(null)
     },
     onError: (err: { response?: { data?: { detail?: string } } }) => {
       setFormError(err?.response?.data?.detail ?? 'No se pudo agregar el email.')
     },
+  })
+
+  const patchMutation = useMutation({
+    mutationFn: ({ id, field, value }: { id: string; field: NotifKey; value: boolean }) =>
+      api.patch(`/alert-emails/${id}`, { [field]: value }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['alert-emails'] }),
   })
 
   const deleteMutation = useMutation({
@@ -72,15 +106,18 @@ function AlertEmailsTab() {
   function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     if (!emailInput.trim()) return
-    addMutation.mutate({ email: emailInput.trim(), label: labelInput.trim() || undefined })
+    addMutation.mutate({ email: emailInput.trim(), label: labelInput.trim() || undefined, ...newTypes })
+  }
+
+  function toggleNew(key: NotifKey) {
+    setNewTypes(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
   return (
-    <div className="p-6 max-w-xl">
+    <div className="p-6">
       <p className="text-sm text-gray-500 mb-6">
-        Estos emails reciben el resumen diario de alertas de mantenimiento (neumáticos,
-        services vencidos o próximos, licencias). Se suman a los usuarios con rol de
-        Administrador o Encargado de mantenimiento.
+        Configurá emails extra para cada tipo de notificación. Se suman a los usuarios con rol
+        de Administrador o Encargado de mantenimiento que ya reciben las alertas por defecto.
       </p>
 
       {/* Formulario */}
@@ -103,6 +140,19 @@ function AlertEmailsTab() {
             className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
+        <div className="flex flex-wrap gap-3">
+          {NOTIF_TYPES.map(nt => (
+            <label key={nt.key} className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={newTypes[nt.key]}
+                onChange={() => toggleNew(nt.key)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              {nt.label}
+            </label>
+          ))}
+        </div>
         {formError && <p className="text-xs text-red-600">{formError}</p>}
         <button
           type="submit"
@@ -123,24 +173,57 @@ function AlertEmailsTab() {
           <p className="text-sm text-gray-400">No hay emails adicionales configurados.</p>
         </div>
       ) : (
-        <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden bg-white">
-          {alertEmails.map(ae => (
-            <div key={ae.id} className="flex items-center gap-3 px-4 py-3">
-              <Mail size={15} className="text-gray-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 truncate">{ae.email}</p>
-                {ae.label && <p className="text-xs text-gray-400 mt-0.5 truncate">{ae.label}</p>}
+        <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+          {/* Header */}
+          <div className="grid grid-cols-[1fr_repeat(5,_auto)_auto] gap-x-4 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
+            <span>Email</span>
+            {NOTIF_TYPES.map(nt => (
+              <span key={nt.key} className="text-center whitespace-nowrap">{nt.label}</span>
+            ))}
+            <span></span>
+          </div>
+          {/* Rows */}
+          <div className="divide-y divide-gray-100">
+            {alertEmails.map(ae => (
+              <div key={ae.id} className="grid grid-cols-[1fr_repeat(5,_auto)_auto] gap-x-4 items-center px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{ae.email}</p>
+                  {ae.label && <p className="text-xs text-gray-400 mt-0.5 truncate">{ae.label}</p>}
+                </div>
+                {NOTIF_TYPES.map(nt => {
+                  const active = ae[nt.key]
+                  return (
+                    <div key={nt.key} className="flex justify-center">
+                      <button
+                        type="button"
+                        title={`${nt.label}: ${active ? 'activado' : 'desactivado'}`}
+                        onClick={() => patchMutation.mutate({ id: ae.id, field: nt.key, value: !active })}
+                        disabled={patchMutation.isPending}
+                        className={`w-6 h-6 rounded flex items-center justify-center transition-colors disabled:opacity-40 ${
+                          active
+                            ? 'bg-green-500 hover:bg-green-600'
+                            : 'border border-gray-200 hover:border-gray-300 hover:bg-gray-100'
+                        }`}
+                      >
+                        {active
+                          ? <Check size={11} className="text-white" />
+                          : <Minus size={11} className="text-gray-300" />
+                        }
+                      </button>
+                    </div>
+                  )
+                })}
+                <button
+                  onClick={() => deleteMutation.mutate(ae.id)}
+                  disabled={deleteMutation.isPending}
+                  className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-40"
+                  title="Eliminar"
+                >
+                  <Trash2 size={15} />
+                </button>
               </div>
-              <button
-                onClick={() => deleteMutation.mutate(ae.id)}
-                disabled={deleteMutation.isPending}
-                className="text-gray-300 hover:text-red-500 transition-colors shrink-0 disabled:opacity-40"
-                title="Eliminar"
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -230,8 +313,8 @@ export default function ConfigPage() {
       {tab === 'alert_emails' ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100">
-            <p className="font-semibold text-gray-900 text-sm">Emails de alertas de mantenimiento</p>
-            <p className="text-xs text-gray-400 mt-0.5">Destinatarios extra del resumen diario</p>
+            <p className="font-semibold text-gray-900 text-sm">Emails de alertas y notificaciones</p>
+            <p className="text-xs text-gray-400 mt-0.5">Destinatarios extra por tipo de alerta</p>
           </div>
           <AlertEmailsTab />
         </div>
