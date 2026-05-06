@@ -140,7 +140,7 @@ async def _async_notify_trip_assigned(trip_id: str) -> dict:
                 send_email(driver_user.email, subject, html)
             await _add_notification(db, trip.tenant_id, driver_user.id,
                 title=f"Reparto asignado: {doc}",
-                body=f"Tenés un nuevo reparto para el {date_str}. Vehículo: {vehicle_plate}.",
+                body=f"Fecha: {date_str}\nVehículo: {vehicle_plate}\nParadas: {trip.stops_count or '—'}",
                 link="/delivery",
             )
             sent += 1

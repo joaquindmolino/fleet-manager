@@ -107,7 +107,7 @@ export default function NotificationsPage() {
                   {n.title}
                 </p>
                 {n.body && (
-                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{n.body}</p>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed whitespace-pre-line">{n.body}</p>
                 )}
                 <p className="text-xs text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
               </div>
