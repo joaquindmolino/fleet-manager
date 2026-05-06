@@ -13,6 +13,7 @@ class MachineBase(BaseModel):
     year: int | None = None
     machine_type: TipoMaquina = TipoMaquina.AUTOELEVADOR_GASOIL
     serial_number: str | None = None
+    hours_used: int = 0
     notes: str | None = None
 
 
