@@ -1,11 +1,11 @@
 """Configuración de la base de datos y sesión SQLAlchemy asíncrona."""
 
 from collections.abc import AsyncGenerator
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import DateTime, func
-from datetime import datetime
 import uuid
 
 from app.core.config import settings
@@ -34,16 +34,24 @@ class Base(DeclarativeBase):
     pass
 
 
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class TimestampMixin:
     """Mixin con campos de auditoría comunes a todas las tablas."""
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=_now,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        onupdate=func.now(),
+        default=_now,
+        onupdate=_now,
         nullable=False,
     )
 
