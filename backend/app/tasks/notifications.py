@@ -148,18 +148,37 @@ async def _async_notify_trip_assigned(trip_id: str) -> dict:
         if trip.driver_id:
             coordinators = await _driver_coordinators(db, trip.driver_id, trip.tenant_id)
             driver_name = driver_user.full_name if driver_user else (driver.full_name if driver else "Chofer")
+            coord_subject: str | None = None
+            coord_html: str | None = None
             for coord in coordinators:
-                subject, html = build_trip_assigned_coordinator_email(
-                    driver_name=driver_name, document=doc, stops_count=trip.stops_count,
-                    vehicle_plate=vehicle_plate, date_str=date_str, frontend_url=settings.FRONTEND_URL,
-                )
+                if coord_subject is None:
+                    coord_subject, coord_html = build_trip_assigned_coordinator_email(
+                        driver_name=driver_name, document=doc, stops_count=trip.stops_count,
+                        vehicle_plate=vehicle_plate, date_str=date_str, frontend_url=settings.FRONTEND_URL,
+                    )
                 if coord.email:
-                    send_email(coord.email, subject, html)
+                    send_email(coord.email, coord_subject, coord_html)
                 await _add_notification(db, trip.tenant_id, coord.id,
                     title=f"Nuevo reparto — {driver_name}",
                     body=f"{driver_name} tiene un nuevo reparto ({doc}) para el {date_str}.",
                     link=f"/trips/{trip.id}",
                 )
+                sent += 1
+
+            # Emails extra suscritos a viaje_asignado
+            extra = (await db.execute(
+                select(AlertEmail).where(
+                    AlertEmail.tenant_id == trip.tenant_id,
+                    AlertEmail.tipo_viaje_asignado.is_(True),
+                )
+            )).scalars().all()
+            for ae in extra:
+                if coord_subject is None:
+                    coord_subject, coord_html = build_trip_assigned_coordinator_email(
+                        driver_name=driver_name, document=doc, stops_count=trip.stops_count,
+                        vehicle_plate=vehicle_plate, date_str=date_str, frontend_url=settings.FRONTEND_URL,
+                    )
+                send_email(ae.email, coord_subject, coord_html)
                 sent += 1
 
         return {"ok": True, "sent": sent}
@@ -188,18 +207,37 @@ async def _async_notify_trip_started(trip_id: str) -> dict:
 
         coordinators = await _driver_coordinators(db, trip.driver_id, trip.tenant_id)
         sent = 0
+        started_subject: str | None = None
+        started_html: str | None = None
         for coord in coordinators:
-            subject, html = build_trip_started_email(
-                driver_name=driver_name, document=doc,
-                started_at=started_at, frontend_url=settings.FRONTEND_URL,
-            )
+            if started_subject is None:
+                started_subject, started_html = build_trip_started_email(
+                    driver_name=driver_name, document=doc,
+                    started_at=started_at, frontend_url=settings.FRONTEND_URL,
+                )
             if coord.email:
-                send_email(coord.email, subject, html)
+                send_email(coord.email, started_subject, started_html)
             await _add_notification(db, trip.tenant_id, coord.id,
                 title=f"Reparto iniciado — {driver_name}",
                 body=f"{driver_name} inició el reparto {doc} a las {started_at}.",
                 link=f"/trips/{trip.id}",
             )
+            sent += 1
+
+        # Emails extra suscritos a viaje_iniciado
+        extra = (await db.execute(
+            select(AlertEmail).where(
+                AlertEmail.tenant_id == trip.tenant_id,
+                AlertEmail.tipo_viaje_iniciado.is_(True),
+            )
+        )).scalars().all()
+        for ae in extra:
+            if started_subject is None:
+                started_subject, started_html = build_trip_started_email(
+                    driver_name=driver_name, document=doc,
+                    started_at=started_at, frontend_url=settings.FRONTEND_URL,
+                )
+            send_email(ae.email, started_subject, started_html)
             sent += 1
 
         return {"ok": True, "sent": sent}
@@ -235,19 +273,38 @@ async def _async_notify_trip_completed(trip_id: str) -> dict:
 
         recipients: dict[uuid.UUID, User] = {u.id: u for u in admins + coordinators}
         sent = 0
+        completed_subject: str | None = None
+        completed_html: str | None = None
         for user in recipients.values():
-            subject, html = build_trip_completed_email(
-                driver_name=driver_name, document=doc,
-                km_driven=km_driven, frontend_url=settings.FRONTEND_URL,
-            )
+            if completed_subject is None:
+                completed_subject, completed_html = build_trip_completed_email(
+                    driver_name=driver_name, document=doc,
+                    km_driven=km_driven, frontend_url=settings.FRONTEND_URL,
+                )
             if user.email:
-                send_email(user.email, subject, html)
+                send_email(user.email, completed_subject, completed_html)
             km_text = f" · {km_driven} km recorridos" if km_driven else ""
             await _add_notification(db, trip.tenant_id, user.id,
                 title=f"Reparto completado — {driver_name}",
                 body=f"{driver_name} completó el reparto {doc}{km_text}.",
                 link=f"/trips/{trip.id}",
             )
+            sent += 1
+
+        # Emails extra suscritos a viaje_completado
+        extra = (await db.execute(
+            select(AlertEmail).where(
+                AlertEmail.tenant_id == trip.tenant_id,
+                AlertEmail.tipo_viaje_completado.is_(True),
+            )
+        )).scalars().all()
+        for ae in extra:
+            if completed_subject is None:
+                completed_subject, completed_html = build_trip_completed_email(
+                    driver_name=driver_name, document=doc,
+                    km_driven=km_driven, frontend_url=settings.FRONTEND_URL,
+                )
+            send_email(ae.email, completed_subject, completed_html)
             sent += 1
 
         return {"ok": True, "sent": sent}
@@ -289,16 +346,37 @@ async def _async_daily_trips_summary() -> dict:
                 status_val = t.status.value if hasattr(t.status, "value") else str(t.status)
                 trip_rows.append({"doc": t.associated_document or "Sin doc.", "driver": driver_name, "status": status_val, "km": km})
 
+            summary_subject: str | None = None
+            summary_html: str | None = None
+
             recipients = await _users_by_roles(db, tenant.id, ["Administrador", "Coordinador de viajes"])
             for user in recipients:
                 if user.email:
-                    subject, html = build_daily_summary_email(
+                    if summary_subject is None:
+                        summary_subject, summary_html = build_daily_summary_email(
+                            tenant_name=tenant.name, completed=len(completed),
+                            in_progress=len(in_progress), pending=len(pending),
+                            trip_rows=trip_rows, frontend_url=settings.FRONTEND_URL,
+                        )
+                    send_email(user.email, summary_subject, summary_html)
+                    total_sent += 1
+
+            # Emails extra suscritos a resumen_viajes
+            extra = (await db.execute(
+                select(AlertEmail).where(
+                    AlertEmail.tenant_id == tenant.id,
+                    AlertEmail.tipo_resumen_viajes.is_(True),
+                )
+            )).scalars().all()
+            for ae in extra:
+                if summary_subject is None:
+                    summary_subject, summary_html = build_daily_summary_email(
                         tenant_name=tenant.name, completed=len(completed),
                         in_progress=len(in_progress), pending=len(pending),
                         trip_rows=trip_rows, frontend_url=settings.FRONTEND_URL,
                     )
-                    send_email(user.email, subject, html)
-                    total_sent += 1
+                send_email(ae.email, summary_subject, summary_html)
+                total_sent += 1
 
         return {"ok": True, "tenants": len(tenants), "emails_sent": total_sent}
 
@@ -455,9 +533,12 @@ async def _async_daily_maintenance_alerts() -> dict:
                 )
                 total_sent += 1
 
-            # Emails extra configurados por el tenant
+            # Emails extra suscritos a alertas de mantenimiento
             extra_emails = (await db.execute(
-                select(AlertEmail).where(AlertEmail.tenant_id == tid)
+                select(AlertEmail).where(
+                    AlertEmail.tenant_id == tid,
+                    AlertEmail.tipo_mantenimiento.is_(True),
+                )
             )).scalars().all()
             for ae in extra_emails:
                 if subject_built is None:
