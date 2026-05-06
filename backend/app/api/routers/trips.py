@@ -275,6 +275,53 @@ async def start_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSessio
     return trip
 
 
+@router.post("/{trip_id}/complete", response_model=TripResponse)
+async def complete_trip(
+    trip_id: uuid.UUID,
+    body: TripUpdate,
+    current_user: CurrentUser,
+    db: DbSession,
+    bg: BackgroundTasks,
+) -> Trip:
+    """El conductor finaliza su propio viaje en curso."""
+    driver = (await db.execute(
+        select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if driver is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No tenés perfil de conductor.")
+    trip = (await db.execute(
+        select(Trip).where(
+            Trip.id == trip_id,
+            Trip.tenant_id == current_user.tenant_id,
+            Trip.driver_id == driver.id,
+        )
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+    if trip.status != EstadoViaje.EN_CURSO:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El viaje no está en curso.")
+
+    trip.status = EstadoViaje.COMPLETADO
+    trip.end_time = datetime.now(timezone.utc)
+
+    if body.end_odometer and trip.start_odometer and body.end_odometer > trip.start_odometer:
+        km_driven = body.end_odometer - trip.start_odometer
+        trip.end_odometer = body.end_odometer
+        vehicle = (await db.execute(select(Vehicle).where(Vehicle.id == trip.vehicle_id))).scalar_one_or_none()
+        if vehicle:
+            vehicle.odometer = body.end_odometer
+            tires_result = await db.execute(
+                select(Tire).where(Tire.vehicle_id == trip.vehicle_id, Tire.status == "en_uso")
+            )
+            for tire in tires_result.scalars().all():
+                tire.current_km += km_driven
+
+    await db.flush()
+    await db.refresh(trip)
+    bg.add_task(_async_notify_trip_completed, str(trip.id))
+    return trip
+
+
 @router.get("/{trip_id}/stops", response_model=list[TripStopResponse], dependencies=[_can_ver])
 async def list_trip_stops(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> list[TripStop]:
     """Lista las entregas registradas de un viaje."""

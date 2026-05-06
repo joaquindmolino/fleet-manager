@@ -63,9 +63,8 @@ export default function DeliveryModePage() {
 
   const finishMutation = useMutation({
     mutationFn: () =>
-      api.patch(`/trips/${trip!.id}`, {
-        status: 'completado',
-        ...(endOdometer ? { end_odometer: parseInt(endOdometer) } : {}),
+      api.post(`/trips/${trip!.id}/complete`, {
+        end_odometer: endOdometer ? parseInt(endOdometer) : undefined,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trips'] })
