@@ -27,9 +27,11 @@ class MaintenanceService(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    # Intervalo en kilómetros (nulo si no aplica)
+    # Intervalo en kilómetros (vehículos)
     interval_km: Mapped[int | None] = mapped_column(Integer)
-    # Intervalo en días (nulo si no aplica)
+    # Intervalo en horas de uso (máquinas)
+    interval_hours: Mapped[int | None] = mapped_column(Integer)
+    # Intervalo en días (opcional, para ambos tipos)
     interval_days: Mapped[int | None] = mapped_column(Integer)
     applies_to: Mapped[str] = mapped_column(String(50), default=AplicaA.VEHICULO, nullable=False)
 

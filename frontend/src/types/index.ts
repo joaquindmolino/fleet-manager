@@ -125,6 +125,7 @@ export interface MaintenanceService {
   name: string
   description: string | null
   interval_km: number | null
+  interval_hours: number | null
   interval_days: number | null
   applies_to: 'vehiculo' | 'maquina' | 'ambos'
 }

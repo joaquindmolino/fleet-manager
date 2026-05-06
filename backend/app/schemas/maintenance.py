@@ -12,6 +12,7 @@ class MaintenanceServiceBase(BaseModel):
     name: str
     description: str | None = None
     interval_km: int | None = None
+    interval_hours: int | None = None
     interval_days: int | None = None
     applies_to: AplicaA = AplicaA.VEHICULO
 
@@ -24,6 +25,7 @@ class MaintenanceServiceUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     interval_km: int | None = None
+    interval_hours: int | None = None
     interval_days: int | None = None
     applies_to: AplicaA | None = None
 

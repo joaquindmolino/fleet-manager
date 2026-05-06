@@ -19,8 +19,8 @@ interface RF { vehicle_id: string; machine_id: string; service_id: string; suppl
 const REC_EMPTY: RF = { vehicle_id: '', machine_id: '', service_id: '', supplier_id: '', service_date: new Date().toISOString().split('T')[0], odometer_at_service: '', cost: '' }
 
 // ── Services ───────────────────────────────────────────────────────────────
-interface SF { name: string; applies_to: string; interval_km: string; interval_days: string }
-const SVC_EMPTY: SF = { name: '', applies_to: 'vehiculo', interval_km: '', interval_days: '' }
+interface SF { name: string; applies_to: string; interval_km: string; interval_hours: string }
+const SVC_EMPTY: SF = { name: '', applies_to: 'vehiculo', interval_km: '', interval_hours: '' }
 const APPLIES_LABEL: Record<string, string> = { vehiculo: 'Vehículo', maquina: 'Máquina', ambos: 'Ambos' }
 
 // ── Work Orders ────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ export default function MaintenancePage() {
 
   // Services state
   const [svcEditingId, setSvcEditingId] = useState<string | null>(null)
-  const [svcEditForm, setSvcEditForm] = useState<SF>(SVC_EMPTY)
+  const [svcEditForm, setSvcEditForm] = useState<SF>({ name: '', applies_to: 'vehiculo', interval_km: '', interval_hours: '' })
   const [svcAddingRow, setSvcAddingRow] = useState(false)
   const [svcAddForm, setSvcAddForm] = useState<SF>(SVC_EMPTY)
 
@@ -159,7 +159,7 @@ export default function MaintenancePage() {
   const updateTire = useMutation({ mutationFn: ({ id, body }: { id: string; body: object }) => api.patch(`/tires/${id}`, body), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tires', tiresVehicleId] }); setTiresEditingId(null) } })
 
   function recBody(f: RF) { return { vehicle_id: f.vehicle_id || null, machine_id: f.machine_id || null, service_id: f.service_id || null, supplier_id: f.supplier_id || null, service_date: f.service_date, odometer_at_service: f.odometer_at_service ? parseInt(f.odometer_at_service) : null, cost: f.cost || null } }
-  function svcBody(f: SF) { return { name: f.name, applies_to: f.applies_to, interval_km: f.interval_km ? parseInt(f.interval_km) : null, interval_days: f.interval_days ? parseInt(f.interval_days) : null } }
+  function svcBody(f: SF) { return { name: f.name, applies_to: f.applies_to, interval_km: f.interval_km ? parseInt(f.interval_km) : null, interval_hours: f.interval_hours ? parseInt(f.interval_hours) : null } }
   function woAddBody(f: WF) { return { description: f.description, priority: f.priority, vehicle_id: f.vehicle_id || null, machine_id: f.machine_id || null, due_date: f.due_date || null } }
   function woEditBody(f: WF) { return { description: f.description, priority: f.priority, due_date: f.due_date || null } }
 
@@ -302,7 +302,7 @@ export default function MaintenancePage() {
             <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  {['Nombre', 'Aplica a', 'Intervalo km', 'Intervalo días', ''].map(h => (
+                  {['Nombre', 'Aplica a', 'Intervalo km', 'Intervalo horas', ''].map(h => (
                     <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -314,7 +314,7 @@ export default function MaintenancePage() {
                     <td className="px-3 py-2"><input form="add-svc" required value={svcAddForm.name} onChange={e => saf('name', e.target.value)} placeholder="Cambio de aceite *" className={CI} /></td>
                     <td className="px-3 py-2"><select form="add-svc" value={svcAddForm.applies_to} onChange={e => saf('applies_to', e.target.value)} className={CS}><option value="vehiculo">Vehículo</option><option value="maquina">Máquina</option><option value="ambos">Ambos</option></select></td>
                     <td className="px-3 py-2"><input form="add-svc" type="number" min="0" value={svcAddForm.interval_km} onChange={e => saf('interval_km', e.target.value)} placeholder="10000" className={CI} /></td>
-                    <td className="px-3 py-2"><input form="add-svc" type="number" min="0" value={svcAddForm.interval_days} onChange={e => saf('interval_days', e.target.value)} placeholder="365" className={CI} /></td>
+                    <td className="px-3 py-2"><input form="add-svc" type="number" min="0" value={svcAddForm.interval_hours} onChange={e => saf('interval_hours', e.target.value)} placeholder="500" className={CI} /></td>
                     <td className="px-3 py-2"><div className="flex gap-1"><button form="add-svc" type="submit" disabled={createService.isPending} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50">Guardar</button><button type="button" onClick={() => setSvcAddingRow(false)} className="text-xs border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Cancelar</button></div></td>
                   </tr>
                 )}
@@ -326,7 +326,7 @@ export default function MaintenancePage() {
                       <td className="px-3 py-2"><input form={`es-${s.id}`} required value={svcEditForm.name} onChange={e => sef('name', e.target.value)} className={CI} /></td>
                       <td className="px-3 py-2"><select form={`es-${s.id}`} value={svcEditForm.applies_to} onChange={e => sef('applies_to', e.target.value)} className={CS}><option value="vehiculo">Vehículo</option><option value="maquina">Máquina</option><option value="ambos">Ambos</option></select></td>
                       <td className="px-3 py-2"><input form={`es-${s.id}`} type="number" min="0" value={svcEditForm.interval_km} onChange={e => sef('interval_km', e.target.value)} className={CI} /></td>
-                      <td className="px-3 py-2"><input form={`es-${s.id}`} type="number" min="0" value={svcEditForm.interval_days} onChange={e => sef('interval_days', e.target.value)} className={CI} /></td>
+                      <td className="px-3 py-2"><input form={`es-${s.id}`} type="number" min="0" value={svcEditForm.interval_hours} onChange={e => sef('interval_hours', e.target.value)} className={CI} /></td>
                       <td className="px-3 py-2"><div className="flex gap-1"><button form={`es-${s.id}`} type="submit" disabled={updateService.isPending} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50">Guardar</button><button type="button" onClick={() => setSvcEditingId(null)} className="text-xs border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Cancelar</button></div></td>
                     </tr>
                   ) : (
@@ -334,8 +334,8 @@ export default function MaintenancePage() {
                       <td className="px-3 py-3 font-medium text-gray-900">{s.name}</td>
                       <td className="px-3 py-3 text-gray-500 text-xs">{APPLIES_LABEL[s.applies_to] ?? s.applies_to}</td>
                       <td className="px-3 py-3 text-gray-500">{s.interval_km ? `${s.interval_km.toLocaleString('es-AR')} km` : '—'}</td>
-                      <td className="px-3 py-3 text-gray-500">{s.interval_days ? `${s.interval_days} días` : '—'}</td>
-                      <td className="px-3 py-3 text-right"><button onClick={() => { setSvcAddingRow(false); setSvcEditingId(s.id); setSvcEditForm({ name: s.name, applies_to: s.applies_to, interval_km: s.interval_km?.toString() ?? '', interval_days: s.interval_days?.toString() ?? '' }) }} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button></td>
+                      <td className="px-3 py-3 text-gray-500">{s.interval_hours ? `${s.interval_hours.toLocaleString('es-AR')} hs` : '—'}</td>
+                      <td className="px-3 py-3 text-right"><button onClick={() => { setSvcAddingRow(false); setSvcEditingId(s.id); setSvcEditForm({ name: s.name, applies_to: s.applies_to, interval_km: s.interval_km?.toString() ?? '', interval_hours: s.interval_hours?.toString() ?? '' }) }} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button></td>
                     </tr>
                   ))}
               </tbody>
