@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import settings
 from app.models.coordinator import CoordinatorAssignment
 from app.models.driver import Driver
+from app.models.machine import Machine
+from app.models.maintenance import MaintenanceRecord, MaintenanceService
 from app.models.notification import Notification
 from app.models.tenant import Tenant
 from app.models.tire import Tire
@@ -307,7 +309,8 @@ def daily_maintenance_alerts() -> dict:
 
 
 async def _async_daily_maintenance_alerts() -> dict:
-    from datetime import date
+    from datetime import date, timedelta
+    from sqlalchemy import func, or_
     async with _task_db() as db:
         tenants = (await db.execute(select(Tenant).where(Tenant.is_active.is_(True)))).scalars().all()
         today = datetime.now(timezone.utc).date()
@@ -315,9 +318,11 @@ async def _async_daily_maintenance_alerts() -> dict:
 
         for tenant in tenants:
             alerts: list[dict] = []
+            tid = tenant.id
 
+            # ── Neumáticos ──────────────────────────────────────────────────
             tires = (await db.execute(
-                select(Tire).where(Tire.tenant_id == tenant.id, Tire.status == "en_uso", Tire.km_limit.isnot(None))
+                select(Tire).where(Tire.tenant_id == tid, Tire.status == "en_uso", Tire.km_limit.isnot(None))
             )).scalars().all()
             for tire in tires:
                 remaining = (tire.km_limit or 0) - tire.current_km
@@ -331,8 +336,9 @@ async def _async_daily_maintenance_alerts() -> dict:
                         "severity": "danger" if remaining <= 500 else "warning",
                     })
 
+            # ── Licencias de conductores ────────────────────────────────────
             drivers = (await db.execute(
-                select(Driver).where(Driver.tenant_id == tenant.id, Driver.status == "activo", Driver.license_expiry.isnot(None))
+                select(Driver).where(Driver.tenant_id == tid, Driver.status == "activo", Driver.license_expiry.isnot(None))
             )).scalars().all()
             for driver in drivers:
                 expiry = driver.license_expiry
@@ -349,17 +355,94 @@ async def _async_daily_maintenance_alerts() -> dict:
                         "severity": "danger" if days_left <= 7 else "warning",
                     })
 
+            # ── Services de vehículos (km + días) ──────────────────────────
+            v_latest_sq = (
+                select(
+                    MaintenanceRecord.vehicle_id,
+                    MaintenanceRecord.service_id,
+                    func.max(MaintenanceRecord.service_date).label("last_date"),
+                    func.max(MaintenanceRecord.odometer_at_service).label("last_km"),
+                )
+                .where(MaintenanceRecord.tenant_id == tid, MaintenanceRecord.vehicle_id.isnot(None))
+                .group_by(MaintenanceRecord.vehicle_id, MaintenanceRecord.service_id)
+                .subquery()
+            )
+            v_svc_rows = (await db.execute(
+                select(MaintenanceService, v_latest_sq.c.vehicle_id, v_latest_sq.c.last_date, v_latest_sq.c.last_km, Vehicle.plate, Vehicle.odometer)
+                .join(v_latest_sq, MaintenanceService.id == v_latest_sq.c.service_id)
+                .join(Vehicle, Vehicle.id == v_latest_sq.c.vehicle_id)
+                .where(MaintenanceService.applies_to.in_(["vehiculo", "ambos"]))
+            )).all()
+            for svc, v_id, last_date, last_km, plate, odometer in v_svc_rows:
+                if svc.interval_days and last_date:
+                    days_left = ((last_date + timedelta(days=svc.interval_days)) - today).days
+                    if days_left <= 7:
+                        alerts.append({
+                            "type": "Service vehículo",
+                            "entity": plate,
+                            "detail": f"{svc.name}: {'venció hace ' + str(abs(days_left)) + ' día(s)' if days_left <= 0 else 'vence en ' + str(days_left) + ' día(s)'}",
+                            "severity": "danger" if days_left <= 0 else "warning",
+                        })
+                if svc.interval_km and last_km is not None and odometer is not None:
+                    km_left = (last_km + svc.interval_km) - odometer
+                    if km_left <= svc.interval_km * 0.1:
+                        alerts.append({
+                            "type": "Service vehículo",
+                            "entity": plate,
+                            "detail": f"{svc.name}: {'excedido en ' + f'{abs(km_left):,}' + ' km' if km_left <= 0 else 'faltan ' + f'{km_left:,}' + ' km'}",
+                            "severity": "danger" if km_left <= 0 else "warning",
+                        })
+
+            # ── Services de máquinas (horas + días) ────────────────────────
+            m_latest_sq = (
+                select(
+                    MaintenanceRecord.machine_id,
+                    MaintenanceRecord.service_id,
+                    func.max(MaintenanceRecord.service_date).label("last_date"),
+                    func.max(MaintenanceRecord.odometer_at_service).label("last_hours"),
+                )
+                .where(MaintenanceRecord.tenant_id == tid, MaintenanceRecord.machine_id.isnot(None))
+                .group_by(MaintenanceRecord.machine_id, MaintenanceRecord.service_id)
+                .subquery()
+            )
+            m_svc_rows = (await db.execute(
+                select(MaintenanceService, m_latest_sq.c.machine_id, m_latest_sq.c.last_date, m_latest_sq.c.last_hours, Machine.name, Machine.hours_used)
+                .join(m_latest_sq, MaintenanceService.id == m_latest_sq.c.service_id)
+                .join(Machine, Machine.id == m_latest_sq.c.machine_id)
+                .where(MaintenanceService.applies_to.in_(["maquina", "ambos"]))
+            )).all()
+            for svc, m_id, last_date, last_hours, mname, hours_used in m_svc_rows:
+                if svc.interval_hours and last_hours is not None:
+                    hours_left = (last_hours + svc.interval_hours) - hours_used
+                    if hours_left <= svc.interval_hours * 0.1:
+                        alerts.append({
+                            "type": "Service máquina",
+                            "entity": mname,
+                            "detail": f"{svc.name}: {'excedido en ' + f'{abs(hours_left):,}' + ' hs' if hours_left <= 0 else 'faltan ' + f'{hours_left:,}' + ' hs'}",
+                            "severity": "danger" if hours_left <= 0 else "warning",
+                        })
+                if svc.interval_days and last_date:
+                    days_left = ((last_date + timedelta(days=svc.interval_days)) - today).days
+                    if days_left <= 7:
+                        alerts.append({
+                            "type": "Service máquina",
+                            "entity": mname,
+                            "detail": f"{svc.name}: {'venció hace ' + str(abs(days_left)) + ' día(s)' if days_left <= 0 else 'vence en ' + str(days_left) + ' día(s)'}",
+                            "severity": "danger" if days_left <= 0 else "warning",
+                        })
+
             if not alerts:
                 continue
 
-            recipients = await _users_by_roles(db, tenant.id, ["Administrador", "Encargado de mantenimiento"])
+            alerts.sort(key=lambda a: (0 if a["severity"] == "danger" else 1, a["entity"]))
+            recipients = await _users_by_roles(db, tid, ["Administrador", "Encargado de mantenimiento"])
             for user in recipients:
                 if user.email:
                     subject, html = build_maintenance_alerts_email(
                         tenant_name=tenant.name, alerts=alerts, frontend_url=settings.FRONTEND_URL,
                     )
                     send_email(user.email, subject, html)
-                await _add_notification(db, tenant.id, user.id,
+                await _add_notification(db, tid, user.id,
                     title=f"{len(alerts)} alerta{'s' if len(alerts) > 1 else ''} de mantenimiento",
                     body="Revisá las alertas pendientes en Fleet Manager.",
                     link="/maintenance", notification_type="vencimiento_neumatico",
