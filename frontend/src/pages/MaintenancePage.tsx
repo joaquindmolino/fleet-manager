@@ -21,7 +21,7 @@ const REC_EMPTY: RF = { vehicle_id: '', machine_id: '', service_id: '', supplier
 // ── Services ───────────────────────────────────────────────────────────────
 interface SF { name: string; applies_to: string; interval_km: string; interval_hours: string }
 const SVC_EMPTY: SF = { name: '', applies_to: 'vehiculo', interval_km: '', interval_hours: '' }
-const APPLIES_LABEL: Record<string, string> = { vehiculo: 'Vehículo', maquina: 'Máquina', ambos: 'Ambos' }
+const APPLIES_LABEL: Record<string, string> = { vehiculo: 'Vehículo', camion: 'Camión', camioneta: 'Camioneta', maquina: 'Máquina', ambos: 'Ambos' }
 
 // ── Work Orders ────────────────────────────────────────────────────────────
 interface WF { description: string; priority: string; vehicle_id: string; machine_id: string; due_date: string }
@@ -312,7 +312,7 @@ export default function MaintenancePage() {
                   <tr className={addRow}>
                     <form id="add-svc" onSubmit={e => { e.preventDefault(); createService.mutate(svcBody(svcAddForm)) }} />
                     <td className="px-3 py-2"><input form="add-svc" required value={svcAddForm.name} onChange={e => saf('name', e.target.value)} placeholder="Cambio de aceite *" className={CI} /></td>
-                    <td className="px-3 py-2"><select form="add-svc" value={svcAddForm.applies_to} onChange={e => saf('applies_to', e.target.value)} className={CS}><option value="vehiculo">Vehículo</option><option value="maquina">Máquina</option><option value="ambos">Ambos</option></select></td>
+                    <td className="px-3 py-2"><select form="add-svc" value={svcAddForm.applies_to} onChange={e => saf('applies_to', e.target.value)} className={CS}><option value="vehiculo">Vehículo (todos)</option><option value="camion">Camión</option><option value="camioneta">Camioneta</option><option value="maquina">Máquina</option><option value="ambos">Ambos</option></select></td>
                     <td className="px-3 py-2"><input form="add-svc" type="number" min="0" value={svcAddForm.interval_km} onChange={e => saf('interval_km', e.target.value)} placeholder="10000" className={CI} /></td>
                     <td className="px-3 py-2"><input form="add-svc" type="number" min="0" value={svcAddForm.interval_hours} onChange={e => saf('interval_hours', e.target.value)} placeholder="500" className={CI} /></td>
                     <td className="px-3 py-2"><div className="flex gap-1"><button form="add-svc" type="submit" disabled={createService.isPending} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50">Guardar</button><button type="button" onClick={() => setSvcAddingRow(false)} className="text-xs border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Cancelar</button></div></td>
@@ -324,7 +324,7 @@ export default function MaintenancePage() {
                     <tr key={s.id} className={editRow}>
                       <form id={`es-${s.id}`} onSubmit={e => { e.preventDefault(); updateService.mutate({ id: s.id, body: svcBody(svcEditForm) }) }} />
                       <td className="px-3 py-2"><input form={`es-${s.id}`} required value={svcEditForm.name} onChange={e => sef('name', e.target.value)} className={CI} /></td>
-                      <td className="px-3 py-2"><select form={`es-${s.id}`} value={svcEditForm.applies_to} onChange={e => sef('applies_to', e.target.value)} className={CS}><option value="vehiculo">Vehículo</option><option value="maquina">Máquina</option><option value="ambos">Ambos</option></select></td>
+                      <td className="px-3 py-2"><select form={`es-${s.id}`} value={svcEditForm.applies_to} onChange={e => sef('applies_to', e.target.value)} className={CS}><option value="vehiculo">Vehículo (todos)</option><option value="camion">Camión</option><option value="camioneta">Camioneta</option><option value="maquina">Máquina</option><option value="ambos">Ambos</option></select></td>
                       <td className="px-3 py-2"><input form={`es-${s.id}`} type="number" min="0" value={svcEditForm.interval_km} onChange={e => sef('interval_km', e.target.value)} className={CI} /></td>
                       <td className="px-3 py-2"><input form={`es-${s.id}`} type="number" min="0" value={svcEditForm.interval_hours} onChange={e => sef('interval_hours', e.target.value)} className={CI} /></td>
                       <td className="px-3 py-2"><div className="flex gap-1"><button form={`es-${s.id}`} type="submit" disabled={updateService.isPending} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50">Guardar</button><button type="button" onClick={() => setSvcEditingId(null)} className="text-xs border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Cancelar</button></div></td>

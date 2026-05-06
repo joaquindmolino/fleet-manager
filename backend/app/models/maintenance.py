@@ -11,9 +11,11 @@ from app.core.database import Base, TimestampMixin
 
 
 class AplicaA(str, Enum):
-    VEHICULO = "vehiculo"
+    VEHICULO = "vehiculo"    # todos los vehículos
+    CAMION = "camion"        # solo camiones
+    CAMIONETA = "camioneta"  # solo camionetas
     MAQUINA = "maquina"
-    AMBOS = "ambos"
+    AMBOS = "ambos"          # vehículos + máquinas
 
 
 class MaintenanceService(Base, TimestampMixin):

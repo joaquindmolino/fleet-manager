@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter
 from pydantic import BaseModel
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, and_
 
 from app.api.dependencies import CurrentUser, DbSession
 from app.models.coordinator import CoordinatorAssignment
@@ -171,7 +171,12 @@ async def get_my_alerts(current_user: CurrentUser, db: DbSession) -> AlertsRespo
         )
         .join(v_latest_sq, MaintenanceService.id == v_latest_sq.c.service_id)
         .join(Vehicle, Vehicle.id == v_latest_sq.c.vehicle_id)
-        .where(MaintenanceService.applies_to.in_(["vehiculo", "ambos"]))
+        .where(
+            or_(
+                MaintenanceService.applies_to.in_(["vehiculo", "ambos"]),
+                MaintenanceService.applies_to == Vehicle.vehicle_type,
+            )
+        )
     )
     if vehicle_scope is not None:
         if not vehicle_scope:
@@ -284,7 +289,7 @@ async def get_my_alerts(current_user: CurrentUser, db: DbSession) -> AlertsRespo
         v_services_with_interval = (await db.execute(
             select(MaintenanceService).where(
                 MaintenanceService.tenant_id == tid,
-                MaintenanceService.applies_to.in_(["vehiculo", "ambos"]),
+                MaintenanceService.applies_to.in_(["vehiculo", "ambos", "camion", "camioneta"]),
                 or_(
                     MaintenanceService.interval_km.isnot(None),
                     MaintenanceService.interval_days.isnot(None),
@@ -308,6 +313,9 @@ async def get_my_alerts(current_user: CurrentUser, db: DbSession) -> AlertsRespo
 
             for vehicle in active_vehicles:
                 for svc in v_services_with_interval:
+                    # Si el service es de subtipo específico, verificar que coincida
+                    if svc.applies_to not in ("vehiculo", "ambos") and svc.applies_to != vehicle.vehicle_type:
+                        continue
                     if (vehicle.id, svc.id) not in existing_v_pairs:
                         alerts.append(Alert(
                             type="service_no_history", severity="warning",
