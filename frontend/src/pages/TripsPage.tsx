@@ -37,7 +37,7 @@ export default function TripsPage() {
   const canSeeClients = can('clientes', 'ver')
   const [page, setPage] = useState(1)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<EF>({ origin: '', destination: '', end_odometer: '' })
+  const [editForm, setEditForm] = useState<EF>({ associated_document: '', notes: '', end_odometer: '' })
   const [addingRow, setAddingRow] = useState(false)
   const [addForm, setAddForm] = useState<TF>(EMPTY)
   const [completeModal, setCompleteModal] = useState<CompleteModal | null>(null)
