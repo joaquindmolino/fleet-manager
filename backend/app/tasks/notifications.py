@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from app.models.alert_email import AlertEmail
 from app.models.coordinator import CoordinatorAssignment
 from app.models.driver import Driver
 from app.models.machine import Machine
@@ -435,18 +436,35 @@ async def _async_daily_maintenance_alerts() -> dict:
                 continue
 
             alerts.sort(key=lambda a: (0 if a["severity"] == "danger" else 1, a["entity"]))
+
+            # Usuarios internos con rol de mantenimiento/admin
             recipients = await _users_by_roles(db, tid, ["Administrador", "Encargado de mantenimiento"])
+            subject_built: str | None = None
+            html_built: str | None = None
             for user in recipients:
                 if user.email:
-                    subject, html = build_maintenance_alerts_email(
-                        tenant_name=tenant.name, alerts=alerts, frontend_url=settings.FRONTEND_URL,
-                    )
-                    send_email(user.email, subject, html)
+                    if subject_built is None:
+                        subject_built, html_built = build_maintenance_alerts_email(
+                            tenant_name=tenant.name, alerts=alerts, frontend_url=settings.FRONTEND_URL,
+                        )
+                    send_email(user.email, subject_built, html_built)
                 await _add_notification(db, tid, user.id,
                     title=f"{len(alerts)} alerta{'s' if len(alerts) > 1 else ''} de mantenimiento",
                     body="Revisá las alertas pendientes en Fleet Manager.",
                     link="/maintenance", notification_type="vencimiento_neumatico",
                 )
+                total_sent += 1
+
+            # Emails extra configurados por el tenant
+            extra_emails = (await db.execute(
+                select(AlertEmail).where(AlertEmail.tenant_id == tid)
+            )).scalars().all()
+            for ae in extra_emails:
+                if subject_built is None:
+                    subject_built, html_built = build_maintenance_alerts_email(
+                        tenant_name=tenant.name, alerts=alerts, frontend_url=settings.FRONTEND_URL,
+                    )
+                send_email(ae.email, subject_built, html_built)
                 total_sent += 1
 
         return {"ok": True, "tenants": len(tenants), "emails_sent": total_sent}
