@@ -292,6 +292,9 @@ async def list_trip_stops(trip_id: uuid.UUID, current_user: CurrentUser, db: DbS
 @router.post("/{trip_id}/stops", response_model=TripStopResponse, status_code=status.HTTP_201_CREATED)
 async def create_trip_stop(trip_id: uuid.UUID, body: TripStopCreate, current_user: CurrentUser, db: DbSession) -> TripStop:
     """Registra una entrega con geolocalización durante un viaje en curso."""
+    import logging
+    logger = logging.getLogger(__name__)
+
     trip = (await db.execute(
         select(Trip).where(Trip.id == trip_id, Trip.tenant_id == current_user.tenant_id)
     )).scalar_one_or_none()
@@ -306,18 +309,25 @@ async def create_trip_stop(trip_id: uuid.UUID, body: TripStopCreate, current_use
 
     is_extra = trip.stops_count is not None and stop_count >= trip.stops_count
 
-    stop = TripStop(
-        id=uuid.uuid4(),
-        tenant_id=current_user.tenant_id,
-        trip_id=trip_id,
-        lat=body.lat,
-        lng=body.lng,
-        accuracy=body.accuracy,
-        notes=body.notes,
-        timestamp=body.timestamp,
-        is_extra=is_extra,
-    )
-    db.add(stop)
-    await db.flush()
-    await db.refresh(stop)
-    return stop
+    try:
+        stop = TripStop(
+            id=uuid.uuid4(),
+            tenant_id=current_user.tenant_id,
+            trip_id=trip_id,
+            lat=body.lat,
+            lng=body.lng,
+            accuracy=body.accuracy,
+            notes=body.notes,
+            timestamp=body.timestamp,
+            is_extra=is_extra,
+        )
+        db.add(stop)
+        await db.flush()
+        await db.refresh(stop)
+        return stop
+    except Exception as e:
+        logger.exception("Error al crear stop para trip %s: %s", trip_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al guardar la entrega: {type(e).__name__}: {e}",
+        )
