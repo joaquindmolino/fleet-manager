@@ -43,6 +43,8 @@ export default function DeliveryModePage() {
     refetchInterval: 15_000,
   })
 
+  const [stopError, setStopError] = useState<string | null>(null)
+
   const stopMutation = useMutation({
     mutationFn: (body: { lat: number; lng: number; accuracy?: number | null; notes?: string | null; timestamp: string }) =>
       api.post<TripStop>(`/trips/${trip!.id}/stops`, body).then(r => r.data),
@@ -51,9 +53,11 @@ export default function DeliveryModePage() {
       setPendingPos(null)
       setNoteInput('')
       setGeoError(null)
+      setStopError(null)
     },
-    onError: () => {
-      setGeoError('No se pudo guardar la entrega. Intentá de nuevo.')
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
+      const detail = err?.response?.data?.detail
+      setStopError(detail ?? 'No se pudo guardar la entrega. Intentá de nuevo.')
     },
   })
 
@@ -310,9 +314,15 @@ export default function DeliveryModePage() {
                 className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            {stopError && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2">
+                <AlertTriangle size={15} className="text-red-500 shrink-0" />
+                <p className="text-xs text-red-700">{stopError}</p>
+              </div>
+            )}
             <div className="flex gap-3">
               <button
-                onClick={() => { setPendingPos(null); setNoteInput('') }}
+                onClick={() => { setPendingPos(null); setNoteInput(''); setStopError(null) }}
                 className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
               >
                 Cancelar
@@ -326,7 +336,7 @@ export default function DeliveryModePage() {
                   ? <Loader2 size={16} className="animate-spin" />
                   : <CheckCircle size={16} />
                 }
-                Confirmar
+                {stopError ? 'Reintentar' : 'Confirmar'}
               </button>
             </div>
           </div>
