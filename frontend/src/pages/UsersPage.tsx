@@ -605,13 +605,13 @@ export default function UsersPage() {
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-3">
-                          {!u.is_superadmin && !u.has_driver_profile && !u.has_machine_assigned && (
+                          {!u.is_superadmin && !u.has_driver_profile && role?.permissions?.some(p => p.module === 'conductores') && (
                             <button onClick={() => setTeamTarget(u)} title="Gestionar equipo de conductores"
                               className="text-gray-300 hover:text-blue-500 transition-colors">
                               <Users size={15} />
                             </button>
                           )}
-                          {!u.is_superadmin && !u.has_driver_profile && !u.has_machine_assigned && (
+                          {!u.is_superadmin && !u.has_machine_assigned && (
                             <button onClick={() => setFleetTarget(u)} title="Gestionar flota a cargo"
                               className="text-gray-300 hover:text-green-500 transition-colors">
                               <Truck size={15} />

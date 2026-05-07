@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, LogIn, ToggleLeft, ToggleRight, Building2, ChevronDown, ChevronUp } from 'lucide-react'
 import { api } from '@/lib/api'
@@ -44,7 +43,6 @@ function slugify(name: string) {
 
 export default function AdminPage() {
   const { impersonate } = useAuth()
-  const navigate = useNavigate()
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -78,7 +76,7 @@ export default function AdminPage() {
 
   async function handleImpersonate(tenant: TenantRow) {
     await impersonate(tenant.id, tenant.name)
-    navigate('/dashboard')
+    window.location.href = '/dashboard'
   }
 
   function handleNameChange(name: string) {

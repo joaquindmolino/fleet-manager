@@ -166,11 +166,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 export default function Layout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { impersonating, stopImpersonating } = useAuth()
-  const navigate = useNavigate()
 
   async function handleStopImpersonating() {
     await stopImpersonating()
-    navigate('/admin')
+    window.location.href = '/admin'
   }
 
   return (
