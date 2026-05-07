@@ -3,7 +3,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, update
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
 from app.models.fleet_assignment import FleetAssignment
@@ -102,6 +102,19 @@ async def set_user_fleet(
         db.add(FleetAssignment(tenant_id=tid, user_id=user_id, vehicle_id=vid))
     for mid in body.machine_ids:
         db.add(FleetAssignment(tenant_id=tid, user_id=user_id, machine_id=mid))
+
+    # Sincronizar Machine.assigned_user_id: refleja quién opera cada máquina
+    await db.execute(
+        update(Machine)
+        .where(Machine.assigned_user_id == user_id, Machine.tenant_id == tid)
+        .values(assigned_user_id=None)
+    )
+    if body.machine_ids:
+        await db.execute(
+            update(Machine)
+            .where(Machine.id.in_(body.machine_ids), Machine.tenant_id == tid)
+            .values(assigned_user_id=user_id)
+        )
 
     await db.flush()
     return FleetAssignmentsResponse(user_id=user_id, vehicle_ids=body.vehicle_ids, machine_ids=body.machine_ids)

@@ -33,22 +33,32 @@ def _is_admin_level(user: User) -> bool:
     )
 
 
+def _can_manage_machines(user: User) -> bool:
+    """True si puede ver todas las máquinas (admin o con maquinas:editar)."""
+    if _is_admin_level(user):
+        return True
+    for ov in user.permission_overrides:
+        if ov.permission.module == "maquinas" and ov.permission.action == "editar":
+            return ov.granted
+    return user.role is not None and any(
+        p.module == "maquinas" and p.action == "editar" for p in user.role.permissions
+    )
+
+
 @router.get("", response_model=PaginatedResponse[MachineResponse], dependencies=[_can_ver])
 async def list_machines(
     current_user: CurrentUser, db: DbSession, page: int = 1, size: int = 20
 ) -> PaginatedResponse[MachineResponse]:
+    conditions = [Machine.tenant_id == current_user.tenant_id]
+    if not _can_manage_machines(current_user):
+        conditions.append(Machine.assigned_user_id == current_user.id)
+
     total = (
-        await db.execute(
-            select(func.count()).select_from(Machine).where(Machine.tenant_id == current_user.tenant_id)
-        )
+        await db.execute(select(func.count()).select_from(Machine).where(*conditions))
     ).scalar_one()
     machines = (
         await db.execute(
-            select(Machine)
-            .where(Machine.tenant_id == current_user.tenant_id)
-            .offset((page - 1) * size)
-            .limit(size)
-            .order_by(Machine.name)
+            select(Machine).where(*conditions).offset((page - 1) * size).limit(size).order_by(Machine.name)
         )
     ).scalars().all()
     return PaginatedResponse(items=machines, total=total, page=page, size=size, pages=math.ceil(total / size) if total else 1)
