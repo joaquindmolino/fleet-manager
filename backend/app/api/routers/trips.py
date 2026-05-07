@@ -265,8 +265,8 @@ async def start_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSessio
     )).scalar_one_or_none()
     if trip is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
-    if trip.status != EstadoViaje.PENDIENTE:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El viaje no está en estado pendiente.")
+    if trip.status not in (EstadoViaje.PENDIENTE, EstadoViaje.PLANIFICADO):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El viaje no se puede iniciar en su estado actual.")
     trip.status = EstadoViaje.EN_CURSO
     trip.start_time = datetime.now(timezone.utc)
     await db.flush()

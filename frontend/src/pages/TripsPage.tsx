@@ -84,6 +84,21 @@ export default function TripsPage() {
     onError: () => setStartingId(null),
   })
 
+  function handleStart(t: Trip) {
+    if (t.scheduled_date) {
+      const scheduled = new Date(t.scheduled_date)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      scheduled.setHours(0, 0, 0, 0)
+      if (scheduled > today) {
+        const dateStr = scheduled.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        if (!window.confirm(`Este viaje está programado para el ${dateStr}. ¿Querés iniciarlo de todas formas?`)) return
+      }
+    }
+    setStartingId(t.id)
+    startMutation.mutate(t.id)
+  }
+
   const cancelMutation = useMutation({
     mutationFn: (tripId: string) => api.patch(`/trips/${tripId}`, { status: 'cancelado' }),
     onSuccess: () => {
@@ -265,9 +280,9 @@ export default function TripsPage() {
                       <td className="px-3 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[t.status] ?? 'bg-gray-100 text-gray-500'}`}>{STATUS_LABEL[t.status] ?? t.status}</span></td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-2 flex-wrap">
-                          {t.status === 'planificado' && (
+                          {['planificado', 'pendiente'].includes(t.status) && (
                             <button
-                              onClick={() => { setStartingId(t.id); startMutation.mutate(t.id) }}
+                              onClick={() => handleStart(t)}
                               disabled={startingId === t.id}
                               className="flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium px-2.5 py-1.5 rounded-lg transition-colors"
                             >
@@ -337,9 +352,9 @@ export default function TripsPage() {
                   </Link>
                   {/* Right side actions */}
                   <div className="shrink-0 flex flex-col gap-1.5 items-end justify-center px-3 py-3.5">
-                    {t.status === 'pendiente' && (
+                    {['planificado', 'pendiente'].includes(t.status) && (
                       <button
-                        onClick={() => { setStartingId(t.id); startMutation.mutate(t.id) }}
+                        onClick={() => handleStart(t)}
                         disabled={startingId === t.id}
                         className="flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium px-2.5 py-1.5 rounded-lg transition-colors"
                       >
