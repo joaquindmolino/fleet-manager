@@ -130,9 +130,9 @@ export default function DeliveryModePage() {
   const reachedPlanned = plannedCount !== null && totalCount >= plannedCount
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="h-full bg-gray-50 flex flex-col overflow-hidden">
 
-      {/* Header */}
+      {/* Header fijo */}
       <div className="bg-white border-b border-gray-200 px-4 py-4 flex items-center gap-3 shrink-0">
         <button onClick={() => navigate('/dashboard')} className="text-gray-400 hover:text-gray-600 p-1">
           <ChevronLeft size={22} />
@@ -148,69 +148,118 @@ export default function DeliveryModePage() {
         </div>
       </div>
 
-      {/* Contador */}
-      <div className="px-4 pt-5 pb-3">
-        <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4">
-          <div className="flex items-end justify-between mb-3">
-            <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Entregas</p>
-              <p className="text-3xl font-bold text-gray-900">
-                {totalCount}
-                {plannedCount !== null && (
-                  <span className="text-xl font-normal text-gray-400"> / {plannedCount}</span>
+      {/* Zona scrolleable: contador + banner + error + historial */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+
+        {/* Contador */}
+        <div className="px-4 pt-5 pb-3">
+          <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4">
+            <div className="flex items-end justify-between mb-3">
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Entregas</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {totalCount}
+                  {plannedCount !== null && (
+                    <span className="text-xl font-normal text-gray-400"> / {plannedCount}</span>
+                  )}
+                </p>
+                {extraCount > 0 && (
+                  <p className="text-xs text-amber-600 font-medium mt-0.5">{extraCount} extra{extraCount > 1 ? 's' : ''}</p>
                 )}
-              </p>
-              {extraCount > 0 && (
-                <p className="text-xs text-amber-600 font-medium mt-0.5">{extraCount} extra{extraCount > 1 ? 's' : ''}</p>
+              </div>
+              {plannedCount !== null && (
+                <div className="text-right">
+                  <p className="text-xs text-gray-400 mb-1">{Math.round(Math.min((totalCount / plannedCount) * 100, 100))}%</p>
+                </div>
               )}
             </div>
+
             {plannedCount !== null && (
-              <div className="text-right">
-                <p className="text-xs text-gray-400 mb-1">{Math.round(Math.min((totalCount / plannedCount) * 100, 100))}%</p>
+              <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${reachedPlanned ? 'bg-green-500' : 'bg-blue-500'}`}
+                  style={{ width: `${Math.min((totalCount / plannedCount) * 100, 100)}%` }}
+                />
               </div>
             )}
           </div>
-
-          {plannedCount !== null && (
-            <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${reachedPlanned ? 'bg-green-500' : 'bg-blue-500'}`}
-                style={{ width: `${Math.min((totalCount / plannedCount) * 100, 100)}%` }}
-              />
-            </div>
-          )}
         </div>
+
+        {/* Banner "completaste todas" */}
+        {reachedPlanned && (
+          <div className="px-4 pb-3">
+            <div className="bg-green-50 border border-green-200 rounded-2xl px-5 py-4 flex items-start gap-3">
+              <CheckCircle size={20} className="text-green-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-green-800">
+                  ¡Completaste las {plannedCount} entregas planificadas!
+                </p>
+                <p className="text-xs text-green-600 mt-0.5">
+                  Podés finalizar el reparto o agregar entregas extra.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error de geo */}
+        {geoError && (
+          <div className="px-4 pb-3">
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2">
+              <AlertTriangle size={16} className="text-red-500 shrink-0" />
+              <p className="text-xs text-red-700">{geoError}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Historial de stops */}
+        <div className="px-4 pb-4">
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Historial de entregas</p>
+            </div>
+            {loadingStops ? (
+              <div className="p-6 text-center text-sm text-gray-400">Cargando...</div>
+            ) : stops.length === 0 ? (
+              <div className="p-6 text-center text-sm text-gray-400">Todavía no hay entregas registradas.</div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {[...stops].reverse().map((stop, i) => (
+                  <div key={stop.id} className="px-5 py-3 flex items-start gap-3">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${stop.is_extra ? 'bg-amber-100' : 'bg-blue-100'}`}>
+                      {stop.is_extra
+                        ? <Flag size={12} className="text-amber-600" />
+                        : <MapPin size={12} className="text-blue-600" />
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-800">
+                          Entrega {stops.length - i}
+                        </p>
+                        {stop.is_extra && (
+                          <span className="text-xs bg-amber-100 text-amber-700 font-medium px-1.5 py-0.5 rounded">
+                            Extra
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">{formatTime(stop.timestamp)}</p>
+                      {stop.notes && <p className="text-xs text-gray-600 mt-1">{stop.notes}</p>}
+                      {stop.accuracy && (
+                        <p className="text-xs text-gray-300 mt-0.5">Precisión: ±{Math.round(stop.accuracy)}m</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
 
-      {/* Banner "completaste todas" */}
-      {reachedPlanned && (
-        <div className="px-4 pb-3">
-          <div className="bg-green-50 border border-green-200 rounded-2xl px-5 py-4 flex items-start gap-3">
-            <CheckCircle size={20} className="text-green-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-green-800">
-                ¡Completaste las {plannedCount} entregas planificadas!
-              </p>
-              <p className="text-xs text-green-600 mt-0.5">
-                Podés finalizar el reparto o agregar entregas extra.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Error de geo */}
-      {geoError && (
-        <div className="px-4 pb-3">
-          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2">
-            <AlertTriangle size={16} className="text-red-500 shrink-0" />
-            <p className="text-xs text-red-700">{geoError}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Botón registrar entrega */}
-      <div className="px-4 pb-4">
+      {/* Footer fijo: botones de acción */}
+      <div className="shrink-0 bg-white border-t border-gray-200 px-4 pt-3 pb-5 flex flex-col gap-2">
         <button
           onClick={handleRegisterStop}
           disabled={locating || !!pendingPos}
@@ -228,54 +277,6 @@ export default function DeliveryModePage() {
             <><MapPin size={20} /> Registrar entrega</>
           )}
         </button>
-      </div>
-
-      {/* Historial de stops */}
-      <div className="flex-1 px-4 pb-4">
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Historial de entregas</p>
-          </div>
-          {loadingStops ? (
-            <div className="p-6 text-center text-sm text-gray-400">Cargando...</div>
-          ) : stops.length === 0 ? (
-            <div className="p-6 text-center text-sm text-gray-400">Todavía no hay entregas registradas.</div>
-          ) : (
-            <div className="divide-y divide-gray-50">
-              {[...stops].reverse().map((stop, i) => (
-                <div key={stop.id} className="px-5 py-3 flex items-start gap-3">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${stop.is_extra ? 'bg-amber-100' : 'bg-blue-100'}`}>
-                    {stop.is_extra
-                      ? <Flag size={12} className="text-amber-600" />
-                      : <MapPin size={12} className="text-blue-600" />
-                    }
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-gray-800">
-                        Entrega {stops.length - i}
-                      </p>
-                      {stop.is_extra && (
-                        <span className="text-xs bg-amber-100 text-amber-700 font-medium px-1.5 py-0.5 rounded">
-                          Extra
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{formatTime(stop.timestamp)}</p>
-                    {stop.notes && <p className="text-xs text-gray-600 mt-1">{stop.notes}</p>}
-                    {stop.accuracy && (
-                      <p className="text-xs text-gray-300 mt-0.5">Precisión: ±{Math.round(stop.accuracy)}m</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Botón finalizar */}
-      <div className="px-4 pb-6 shrink-0">
         <button
           onClick={() => setShowFinishModal(true)}
           className="w-full py-3.5 rounded-2xl border-2 border-gray-300 text-gray-700 font-semibold text-sm hover:border-gray-400 hover:bg-gray-50 transition-colors"

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
-import { Plus, Route, Play, Loader2, ChevronRight } from 'lucide-react'
+import { Plus, Route, Play, Loader2, ChevronRight, Navigation } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -35,6 +35,8 @@ export default function TripsPage() {
   const canSeeVehicles = can('vehiculos', 'ver')
   const canSeeDrivers = can('conductores', 'ver')
   const canSeeClients = can('clientes', 'ver')
+  const canEditar = can('viajes', 'editar')
+  const canCerrar = can('viajes', 'cerrar')
   const [page, setPage] = useState(1)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EF>({ associated_document: '', notes: '', end_odometer: '' })
@@ -291,9 +293,17 @@ export default function TripsPage() {
                             </button>
                           )}
                           {t.status === 'en_curso' && (
-                            <button onClick={() => setCompleteModal({ trip: t, end_odometer: '' })} className="text-xs text-green-600 hover:text-green-800 font-medium">Completar</button>
+                            <button
+                              onClick={() => navigate('/delivery')}
+                              className="flex items-center gap-1 text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium px-2.5 py-1.5 rounded-lg transition-colors"
+                            >
+                              <Navigation size={12} /> Continuar
+                            </button>
                           )}
-                          {['planificado', 'pendiente', 'en_curso'].includes(t.status) && (
+                          {t.status === 'en_curso' && canCerrar && (
+                            <button onClick={() => setCompleteModal({ trip: t, end_odometer: '' })} className="text-xs text-green-600 hover:text-green-800 font-medium">Finalizar</button>
+                          )}
+                          {['planificado', 'pendiente', 'en_curso'].includes(t.status) && canEditar && (
                             <button
                               onClick={() => { if (window.confirm('¿Cancelar este viaje?')) { setCancellingId(t.id); cancelMutation.mutate(t.id) } }}
                               disabled={cancellingId === t.id}
@@ -302,7 +312,7 @@ export default function TripsPage() {
                               {cancellingId === t.id ? 'Cancelando…' : 'Cancelar'}
                             </button>
                           )}
-                          {t.status !== 'cancelado' && (
+                          {t.status !== 'cancelado' && canEditar && (
                             <button onClick={() => startEdit(t)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button>
                           )}
                         </div>
@@ -367,13 +377,21 @@ export default function TripsPage() {
                     )}
                     {t.status === 'en_curso' && (
                       <button
+                        onClick={() => navigate('/delivery')}
+                        className="flex items-center gap-1 text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium px-2.5 py-1.5 rounded-lg transition-colors"
+                      >
+                        <Navigation size={12} /> Continuar
+                      </button>
+                    )}
+                    {t.status === 'en_curso' && canCerrar && (
+                      <button
                         onClick={() => setCompleteModal({ trip: t, end_odometer: '' })}
                         className="text-xs text-green-600 hover:text-green-800 font-medium"
                       >
-                        Completar
+                        Finalizar
                       </button>
                     )}
-                    {t.status !== 'pendiente' && t.status !== 'en_curso' && (
+                    {!['planificado', 'pendiente', 'en_curso'].includes(t.status) && (
                       <ChevronRight size={16} className="text-gray-300" />
                     )}
                   </div>
@@ -389,7 +407,7 @@ export default function TripsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
             <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="font-semibold text-gray-900">Completar viaje</h2>
+              <h2 className="font-semibold text-gray-900">Finalizar viaje</h2>
               <button onClick={() => setCompleteModal(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
             </div>
             <form onSubmit={handleComplete} className="p-5 space-y-4">
