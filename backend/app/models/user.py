@@ -18,17 +18,6 @@ role_permissions = Table(
 )
 
 
-class ModuloPermiso(str, Enum):
-    FLOTA = "flota"
-    MANTENIMIENTO = "mantenimiento"
-    VIAJES = "viajes"
-    PROVEEDORES = "proveedores"
-    GPS = "gps"
-    REPORTES = "reportes"
-    USUARIOS = "usuarios"
-    CONFIGURACION = "configuracion"
-
-
 class AccionPermiso(str, Enum):
     VER = "ver"
     CREAR = "crear"

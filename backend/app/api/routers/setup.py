@@ -129,9 +129,10 @@ async def initial_setup(body: SetupRequest, db: DbSession) -> dict:
     db.add(tenant)
     await db.flush()
 
+    admin_username = body.admin_email.split("@")[0]
     admin = User(
         id=uuid.uuid4(), tenant_id=tenant.id,
-        email=body.admin_email, full_name=body.admin_nombre,
+        username=admin_username, email=body.admin_email, full_name=body.admin_nombre,
         hashed_password=hash_password(body.admin_password),
         is_active=True, is_superadmin=True,
     )
@@ -141,7 +142,7 @@ async def initial_setup(body: SetupRequest, db: DbSession) -> dict:
     result = await seed_tenant_roles(tenant.id, db)
     await db.commit()
 
-    return {"ok": True, "mensaje": f"Sistema inicializado. Podés entrar con {body.admin_email}.", **result}
+    return {"ok": True, "mensaje": f"Sistema inicializado. Usuario: {admin_username}", **result}
 
 
 @router.post("/seed-roles", status_code=status.HTTP_200_OK)
@@ -158,7 +159,7 @@ async def seed_roles(
 
 class ResetPasswordRequest(BaseModel):
     setup_key: str
-    email: EmailStr
+    username: str
     new_password: str
 
 
@@ -169,10 +170,16 @@ async def reset_password(body: ResetPasswordRequest, db: DbSession) -> dict:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Setup key incorrecta.")
     if len(body.new_password) < 6:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La contraseña debe tener al menos 6 caracteres.")
-    result = await db.execute(select(User).where(User.email == body.email))
-    user = result.scalar_one_or_none()
-    if not user:
+    result = await db.execute(select(User).where(User.username == body.username))
+    users = result.scalars().all()
+    if not users:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+    if len(users) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Hay {len(users)} usuarios con ese username en distintos tenants. Contactá al superadmin.",
+        )
+    user = users[0]
     user.hashed_password = hash_password(body.new_password)
     await db.commit()
-    return {"ok": True, "mensaje": f"Contraseña de {body.email} actualizada correctamente."}
+    return {"ok": True, "mensaje": f"Contraseña de '{user.username}' actualizada correctamente."}
