@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import ForeignKey, UUID
+from sqlalchemy import CheckConstraint, ForeignKey, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base, TimestampMixin
@@ -26,4 +26,8 @@ class FleetAssignment(Base, TimestampMixin):
     )
     machine_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("machines.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+
+    __table_args__ = (
+        CheckConstraint("num_nonnulls(vehicle_id, machine_id) = 1", name="ck_fleet_assignments_vehicle_xor_machine"),
     )

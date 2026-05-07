@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     EMAIL_FROM: str = "Fleet Manager <noreply@fleetmanager.app>"
 
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        if self.ENVIRONMENT == "production":
+            if self.SECRET_KEY == "change_me_in_production":
+                raise ValueError("SECRET_KEY debe configurarse en producción (variable de entorno SECRET_KEY)")
+            if "localhost" in self.DATABASE_URL:
+                raise ValueError("DATABASE_URL no puede apuntar a localhost en producción")
+        return self
+
     @model_validator(mode="before")
     @classmethod
     def build_database_url(cls, values: dict) -> dict:

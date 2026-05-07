@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { PaginatedResponse } from '@/types'
 
-export function useList<T>(key: string, path: string, size = 100, enabled = true) {
+export function useList<T>(key: string, path: string, size = 500, enabled = true) {
   return useQuery({
     queryKey: [key, 'all'],
     queryFn: () =>

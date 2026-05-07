@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from enum import Enum
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text, UUID
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, String, Text, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, TimestampMixin
@@ -50,6 +50,10 @@ class WorkOrder(Base, TimestampMixin):
     due_date: Mapped[date | None] = mapped_column(Date)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint("num_nonnulls(vehicle_id, machine_id) = 1", name="ck_work_orders_vehicle_xor_machine"),
+    )
 
     vehicle: Mapped["Vehicle | None"] = relationship(back_populates="work_orders")  # noqa: F821
     machine: Mapped["Machine | None"] = relationship(back_populates="work_orders")  # noqa: F821

@@ -2,9 +2,10 @@
 
 import uuid
 from datetime import date
+from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import ForeignKey, Integer, Numeric, String, Text, UUID, Date
+from sqlalchemy import CheckConstraint, ForeignKey, Integer, Numeric, String, Text, UUID, Date
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, TimestampMixin
@@ -70,8 +71,12 @@ class MaintenanceRecord(Base, TimestampMixin):
     )
     service_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     odometer_at_service: Mapped[int | None] = mapped_column(Integer)
-    cost: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    cost: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     notes: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint("num_nonnulls(vehicle_id, machine_id) = 1", name="ck_maintenance_records_vehicle_xor_machine"),
+    )
 
     vehicle: Mapped["Vehicle | None"] = relationship(back_populates="maintenance_records")  # noqa: F821
     machine: Mapped["Machine | None"] = relationship(back_populates="maintenance_records")  # noqa: F821
