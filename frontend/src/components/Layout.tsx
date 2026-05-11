@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -35,11 +35,10 @@ const SUPERADMIN_ITEMS = [
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { user, logout, impersonating } = useAuth()
   const { can } = usePermissions()
-  const navigate = useNavigate()
 
   function handleLogout() {
     logout()
-    navigate('/login')
+    window.location.href = '/login'
   }
 
   const visibleItems = NAV_ITEMS.filter(item => !item.perm || can(item.perm[0], item.perm[1]))

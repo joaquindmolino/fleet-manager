@@ -611,7 +611,7 @@ export default function UsersPage() {
                               <Users size={15} />
                             </button>
                           )}
-                          {!u.is_superadmin && !u.has_machine_assigned && (
+                          {!u.is_superadmin && (
                             <button onClick={() => setFleetTarget(u)} title="Gestionar flota a cargo"
                               className="text-gray-300 hover:text-green-500 transition-colors">
                               <Truck size={15} />

@@ -3,11 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Truck, User, Package, Gauge, Clock, FileText,
-  Edit2, Play, X, Loader2, AlertTriangle, MapPin,
+  Edit2, Play, X, Loader2, AlertTriangle, MapPin, Map as MapIcon,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
+import TripStopsMapModal from '@/components/TripStopsMapModal'
 import type { Trip, TripStop, Vehicle, Driver, Client, PaginatedResponse } from '@/types'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -61,6 +62,7 @@ export default function TripDetailPage() {
 
   const [editing, setEditing] = useState(false)
   const [cancelConfirm, setCancelConfirm] = useState(false)
+  const [mapOpen, setMapOpen] = useState(false)
   const [editForm, setEditForm] = useState<EF>({
     associated_document: '', origin: '', destination: '',
     notes: '', stops_count: '', start_odometer: '', client_id: '',
@@ -203,10 +205,14 @@ export default function TripDetailPage() {
           <Row icon={MapPin}>
             <p className="text-sm text-gray-700">{trip.origin} → {trip.destination}</p>
           </Row>
-          {trip.stops_count != null && (
+          {(trip.stops_count != null || (stops && stops.length > 0)) && (
             <Row icon={Package}>
               <p className="text-sm text-gray-700">
-                {stops ? `${stops.length} / ${trip.stops_count}` : trip.stops_count} paradas
+                {stops != null
+                  ? trip.stops_count != null
+                    ? `${stops.length} / ${trip.stops_count} paradas`
+                    : `${stops.length} parada${stops.length !== 1 ? 's' : ''}`
+                  : `${trip.stops_count} paradas planificadas`}
               </p>
             </Row>
           )}
@@ -367,13 +373,24 @@ export default function TripDetailPage() {
         </div>
       )}
 
+      {mapOpen && stops && (
+        <TripStopsMapModal stops={stops} onClose={() => setMapOpen(false)} />
+      )}
+
       {/* Stops list */}
       {stops && stops.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-gray-900">
               Entregas registradas ({stops.length}{trip.stops_count ? ` / ${trip.stops_count}` : ''})
             </h2>
+            <button
+              onClick={() => setMapOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 px-2.5 py-1 rounded-lg hover:bg-blue-50 transition-colors"
+            >
+              <MapIcon size={14} />
+              Ver mapa
+            </button>
           </div>
           <div className="divide-y divide-gray-50">
             {stops.map((stop, i) => (

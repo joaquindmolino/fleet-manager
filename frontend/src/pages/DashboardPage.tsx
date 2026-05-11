@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Truck, Wrench, Route, Users, PackageCheck, Timer, AlertTriangle, AlertCircle, CalendarClock } from 'lucide-react'
+import { PackageCheck, Timer, AlertTriangle, AlertCircle, CalendarClock } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -46,26 +46,6 @@ const STATUS_LABEL: Record<string, string> = {
   cancelada: 'Cancelada',
 }
 
-function StatCard({ label, value, icon: Icon, color, to }: {
-  label: string
-  value: number | string
-  icon: React.ElementType
-  color: string
-  to: string
-}) {
-  return (
-    <Link to={to} className="bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-4 hover:shadow-sm transition-shadow">
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${color}`}>
-        <Icon size={20} className="text-white" />
-      </div>
-      <div>
-        <p className="text-2xl font-bold text-gray-900">{value ?? '—'}</p>
-        <p className="text-sm text-gray-500">{label}</p>
-      </div>
-    </Link>
-  )
-}
-
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { can } = usePermissions()
@@ -75,7 +55,7 @@ export default function DashboardPage() {
   const [quickTripOpen, setQuickTripOpen] = useState(false)
   const [quickHoursOpen, setQuickHoursOpen] = useState(false)
 
-  const { data: stats, isLoading: loadingStats } = useQuery({
+  const { data: stats } = useQuery({
     queryKey: ['stats', 'dashboard'],
     queryFn: () => api.get<DashboardStats>('/stats/dashboard').then((r) => r.data),
   })
@@ -160,37 +140,6 @@ export default function DashboardPage() {
             </button>
           ) : null}
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard
-          label="Vehículos activos"
-          value={loadingStats ? '—' : stats?.vehicles_activos ?? 0}
-          icon={Truck}
-          color="bg-blue-500"
-          to="/vehicles"
-        />
-        <StatCard
-          label="Órdenes abiertas"
-          value={loadingStats ? '—' : stats?.ordenes_abiertas ?? 0}
-          icon={Wrench}
-          color="bg-amber-500"
-          to="/maintenance"
-        />
-        <StatCard
-          label="Viajes en curso"
-          value={loadingStats ? '—' : stats?.trips_en_curso ?? 0}
-          icon={Route}
-          color="bg-green-500"
-          to="/trips"
-        />
-        <StatCard
-          label="Conductores activos"
-          value={loadingStats ? '—' : stats?.choferes_activos ?? 0}
-          icon={Users}
-          color="bg-purple-500"
-          to="/drivers"
-        />
       </div>
 
       {canSeeTrips && !myDriver && stats && (stats.trips_pendientes > 0 || stats.trips_planificados > 0) && (

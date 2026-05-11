@@ -34,15 +34,8 @@ def _is_admin_level(user: User) -> bool:
 
 
 def _can_manage_machines(user: User) -> bool:
-    """True si puede ver todas las máquinas (admin o con maquinas:editar)."""
-    if _is_admin_level(user):
-        return True
-    for ov in user.permission_overrides:
-        if ov.permission.module == "maquinas" and ov.permission.action == "editar":
-            return ov.granted
-    return user.role is not None and any(
-        p.module == "maquinas" and p.action == "editar" for p in user.role.permissions
-    )
+    """Solo los administradores ven todas las máquinas del tenant."""
+    return _is_admin_level(user)
 
 
 @router.get("", response_model=PaginatedResponse[MachineResponse], dependencies=[_can_ver])

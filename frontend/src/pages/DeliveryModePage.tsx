@@ -8,7 +8,7 @@ import type { Trip, TripStop } from '@/types'
 interface PendingPosition { lat: number; lng: number; accuracy: number | null }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
 function formatDate(iso: string) {
@@ -81,17 +81,29 @@ export default function DeliveryModePage() {
     }
     setLocating(true)
     setGeoError(null)
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        setLocating(false)
-        setPendingPos({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null })
-      },
-      () => {
-        setLocating(false)
-        setGeoError('No se pudo obtener la ubicación. Verificá que los permisos de ubicación estén activos.')
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-    )
+
+    function requestPosition(isRetry = false) {
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          // Algunos navegadores móviles ignoran maximumAge:0 y devuelven una posición cacheada.
+          // Si el fix tiene más de 10 s de antigüedad, reintentamos una vez para forzar una lectura fresca.
+          const ageMs = Date.now() - pos.timestamp
+          if (ageMs > 10_000 && !isRetry) {
+            requestPosition(true)
+            return
+          }
+          setLocating(false)
+          setPendingPos({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null })
+        },
+        () => {
+          setLocating(false)
+          setGeoError('No se pudo obtener la ubicación. Verificá que los permisos de ubicación estén activos.')
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+      )
+    }
+
+    requestPosition()
   }
 
   function confirmStop() {

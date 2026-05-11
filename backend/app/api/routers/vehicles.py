@@ -8,6 +8,8 @@ from sqlalchemy import select, func
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
 from app.models.driver import Driver
+from app.models.fleet_assignment import FleetAssignment
+from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.schemas.common import PaginatedResponse
 from app.schemas.vehicle import VehicleCreate, VehicleResponse, VehicleUpdate
@@ -19,6 +21,29 @@ _can_crear = Depends(make_permission_checker("vehiculos", "crear"))
 _can_editar = Depends(make_permission_checker("vehiculos", "editar"))
 
 
+def _is_admin_level(user: User) -> bool:
+    if user.is_superadmin:
+        return True
+    for ov in user.permission_overrides:
+        if ov.permission.module == "configuracion" and ov.permission.action == "editar":
+            return ov.granted
+    return user.role is not None and any(
+        p.module == "configuracion" and p.action == "editar" for p in user.role.permissions
+    )
+
+
+def _can_manage_vehicles(user: User) -> bool:
+    """Admin o usuario con vehiculos:editar ve todos los vehículos del tenant."""
+    if _is_admin_level(user):
+        return True
+    for ov in user.permission_overrides:
+        if ov.permission.module == "vehiculos" and ov.permission.action == "editar":
+            return ov.granted
+    return user.role is not None and any(
+        p.module == "vehiculos" and p.action == "editar" for p in user.role.permissions
+    )
+
+
 @router.get("", response_model=PaginatedResponse[VehicleResponse], dependencies=[_can_ver])
 async def list_vehicles(
     current_user: CurrentUser,
@@ -27,18 +52,33 @@ async def list_vehicles(
     size: int = 20,
     status: str | None = None,
 ) -> PaginatedResponse[VehicleResponse]:
-    """Lista los vehículos del tenant con paginación opcional y filtro por estado."""
+    """Lista los vehículos del tenant. Admins ven todo; el resto solo su flota asignada."""
     query = select(Vehicle).where(Vehicle.tenant_id == current_user.tenant_id)
     count_query = select(func.count()).select_from(Vehicle).where(Vehicle.tenant_id == current_user.tenant_id)
 
-    driver = (await db.execute(
-        select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
-    )).scalar_one_or_none()
-    if driver is not None:
-        if driver.vehicle_id is None:
-            return PaginatedResponse(items=[], total=0, page=page, size=size, pages=1)
-        query = query.where(Vehicle.id == driver.vehicle_id)
-        count_query = count_query.where(Vehicle.id == driver.vehicle_id)
+    if not _can_manage_vehicles(current_user):
+        # Chofer: solo el vehículo asignado a su perfil de conductor
+        driver = (await db.execute(
+            select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
+        )).scalar_one_or_none()
+        if driver is not None:
+            if driver.vehicle_id is None:
+                return PaginatedResponse(items=[], total=0, page=page, size=size, pages=1)
+            query = query.where(Vehicle.id == driver.vehicle_id)
+            count_query = count_query.where(Vehicle.id == driver.vehicle_id)
+        else:
+            # Encargado / coordinador / otros: vehículos asignados via FleetAssignment
+            assigned_ids = (await db.execute(
+                select(FleetAssignment.vehicle_id).where(
+                    FleetAssignment.user_id == current_user.id,
+                    FleetAssignment.tenant_id == current_user.tenant_id,
+                    FleetAssignment.vehicle_id.isnot(None),
+                )
+            )).scalars().all()
+            if not assigned_ids:
+                return PaginatedResponse(items=[], total=0, page=page, size=size, pages=1)
+            query = query.where(Vehicle.id.in_(assigned_ids))
+            count_query = count_query.where(Vehicle.id.in_(assigned_ids))
 
     if status:
         query = query.where(Vehicle.status == status)
