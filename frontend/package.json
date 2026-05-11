@@ -15,17 +15,14 @@
     "react-router-dom": "^6.26.2",
     "@tanstack/react-query": "^5.56.2",
     "axios": "^1.7.7",
-    "leaflet": "^1.9.4",
     "lucide-react": "^0.441.0",
     "pigeon-maps": "^0.21.6",
-    "react-leaflet": "^4.2.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "tailwind-merge": "^2.5.2"
   },
   "devDependencies": {
     "vite-plugin-pwa": "^0.20.0",
-    "@types/leaflet": "^1.9.8",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",

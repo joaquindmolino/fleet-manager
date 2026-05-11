@@ -1,59 +1,95 @@
-import { useEffect, useMemo } from 'react'
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import { useEffect, useMemo, useRef } from 'react'
 import { X } from 'lucide-react'
 import type { TripStop } from '@/types'
+
+// Leaflet se carga desde CDN en index.html y expone `L` como global.
+// Definimos un tipado minimo para no depender del paquete @types/leaflet.
+interface LeafletMap {
+  setView: (center: [number, number], zoom: number) => LeafletMap
+  fitBounds: (bounds: unknown, options?: { padding?: [number, number] }) => LeafletMap
+  remove: () => void
+  invalidateSize: () => void
+}
+interface LeafletStatic {
+  map: (el: HTMLElement, opts?: object) => LeafletMap
+  tileLayer: (url: string, opts?: object) => { addTo: (m: LeafletMap) => unknown }
+  marker: (latlng: [number, number], opts?: object) => { addTo: (m: LeafletMap) => unknown }
+  polyline: (points: [number, number][], opts?: object) => { addTo: (m: LeafletMap) => unknown }
+  divIcon: (opts: object) => unknown
+  latLngBounds: (points: [number, number][]) => unknown
+}
+declare global {
+  interface Window { L?: LeafletStatic }
+}
 
 interface Props {
   stops: TripStop[]
   onClose: () => void
 }
 
-function numberedIcon(n: number, isExtra: boolean): L.DivIcon {
-  const fill = isExtra ? '#f59e0b' : '#3b82f6'
-  const html = `
-    <svg width="30" height="38" viewBox="0 0 30 38" xmlns="http://www.w3.org/2000/svg">
-      <path d="M15 0C6.7 0 0 6.7 0 15c0 11 15 23 15 23s15-12 15-23C30 6.7 23.3 0 15 0z"
-        fill="${fill}" stroke="white" stroke-width="2"/>
-      <text x="15" y="20" font-family="Arial, sans-serif" font-size="13" font-weight="bold"
-        fill="white" text-anchor="middle">${n}</text>
-    </svg>
-  `
-  return L.divIcon({
-    html,
-    className: '',
-    iconSize: [30, 38],
-    iconAnchor: [15, 38],
-    popupAnchor: [0, -38],
-  })
-}
-
-function FitBounds({ stops }: { stops: TripStop[] }) {
-  const map = useMap()
-  useEffect(() => {
-    if (stops.length === 0) return
-    if (stops.length === 1) {
-      map.setView([stops[0].lat, stops[0].lng], 15)
-      return
-    }
-    const bounds = L.latLngBounds(stops.map(s => [s.lat, s.lng] as [number, number]))
-    map.fitBounds(bounds, { padding: [40, 40] })
-  }, [stops, map])
-  return null
-}
-
 export default function TripStopsMapModal({ stops, onClose }: Props) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const mapRef = useRef<LeafletMap | null>(null)
+
   const ordered = useMemo(
     () => [...stops].sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
     [stops],
   )
-  // Polilínea en orden cronológico. Cuando integremos OSRM, este array será reemplazado
-  // por la geometría devuelta por el servicio de routing (mismo formato lat/lng).
-  const polylinePoints = useMemo(
-    () => ordered.map(s => [s.lat, s.lng] as [number, number]),
-    [ordered],
-  )
+
+  useEffect(() => {
+    const L = window.L
+    if (!L || !containerRef.current || ordered.length === 0) return
+
+    const map = L.map(containerRef.current, { scrollWheelZoom: true })
+    mapRef.current = map
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map)
+
+    // Polilínea cronológica entre paradas. Cuando integremos OSRM, este array
+    // será reemplazado por la geometría devuelta por el servicio de routing.
+    if (ordered.length >= 2) {
+      L.polyline(
+        ordered.map(s => [s.lat, s.lng] as [number, number]),
+        { color: '#3b82f6', weight: 3, opacity: 0.7 },
+      ).addTo(map)
+    }
+
+    ordered.forEach((s, i) => {
+      const fill = s.is_extra ? '#f59e0b' : '#3b82f6'
+      const icon = L.divIcon({
+        className: '',
+        iconSize: [30, 38],
+        iconAnchor: [15, 38],
+        html: `<svg width="30" height="38" viewBox="0 0 30 38" xmlns="http://www.w3.org/2000/svg">
+          <path d="M15 0C6.7 0 0 6.7 0 15c0 11 15 23 15 23s15-12 15-23C30 6.7 23.3 0 15 0z"
+            fill="${fill}" stroke="white" stroke-width="2"/>
+          <text x="15" y="20" font-family="Arial, sans-serif" font-size="13" font-weight="bold"
+            fill="white" text-anchor="middle">${i + 1}</text>
+        </svg>`,
+      })
+      L.marker([s.lat, s.lng], { icon }).addTo(map)
+    })
+
+    if (ordered.length === 1) {
+      map.setView([ordered[0].lat, ordered[0].lng], 15)
+    } else {
+      map.fitBounds(
+        L.latLngBounds(ordered.map(s => [s.lat, s.lng] as [number, number])),
+        { padding: [40, 40] },
+      )
+    }
+
+    // Forzar recálculo de tamaño después del mount (a veces el contenedor mide 0 al inicio)
+    setTimeout(() => map.invalidateSize(), 0)
+
+    return () => {
+      map.remove()
+      mapRef.current = null
+    }
+  }, [ordered])
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex flex-col">
@@ -78,31 +114,7 @@ export default function TripStopsMapModal({ stops, onClose }: Props) {
             Este viaje no tiene entregas registradas.
           </div>
         ) : (
-          <MapContainer
-            center={[ordered[0].lat, ordered[0].lng]}
-            zoom={13}
-            style={{ height: '100%', width: '100%' }}
-            scrollWheelZoom
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            {polylinePoints.length >= 2 && (
-              <Polyline
-                positions={polylinePoints}
-                pathOptions={{ color: '#3b82f6', weight: 3, opacity: 0.7 }}
-              />
-            )}
-            {ordered.map((s, i) => (
-              <Marker
-                key={s.id}
-                position={[s.lat, s.lng]}
-                icon={numberedIcon(i + 1, s.is_extra)}
-              />
-            ))}
-            <FitBounds stops={ordered} />
-          </MapContainer>
+          <div ref={containerRef} className="absolute inset-0" />
         )}
       </div>
     </div>
