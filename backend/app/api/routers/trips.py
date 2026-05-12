@@ -16,7 +16,10 @@ from app.models.trip import Trip, TripStop
 from app.models.vehicle import Vehicle
 from app.models.tire import Tire
 from app.schemas.common import PaginatedResponse
-from app.schemas.trip import TripCreate, TripResponse, TripUpdate, QuickTripCreate, TripStopCreate, TripStopResponse
+from app.schemas.trip import (
+    TripCreate, TripResponse, TripUpdate, QuickTripCreate,
+    TripStopCreate, TripStopResponse, TripStartBody, TripCompleteBody,
+)
 from app.models.trip import EstadoViaje
 from app.tasks.notifications import _async_notify_trip_assigned, _async_notify_trip_started, _async_notify_trip_completed
 
@@ -251,8 +254,14 @@ async def update_trip(
 
 
 @router.post("/{trip_id}/start", response_model=TripResponse)
-async def start_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSession, bg: BackgroundTasks) -> Trip:
-    """Inicia un viaje pendiente: lo pasa a en_curso y registra el start_time."""
+async def start_trip(
+    trip_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DbSession,
+    bg: BackgroundTasks,
+    body: TripStartBody | None = None,
+) -> Trip:
+    """Inicia un viaje pendiente: lo pasa a en_curso, registra start_time y GPS opcional."""
     driver = (await db.execute(
         select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
     )).scalar_one_or_none()
@@ -271,6 +280,9 @@ async def start_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSessio
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El viaje no se puede iniciar en su estado actual.")
     trip.status = EstadoViaje.EN_CURSO
     trip.start_time = datetime.now(timezone.utc)
+    if body and body.start_lat is not None and body.start_lng is not None:
+        trip.start_lat = body.start_lat
+        trip.start_lng = body.start_lng
     await db.flush()
     await db.refresh(trip)
     bg.add_task(_async_notify_trip_started, str(trip.id))
@@ -280,12 +292,12 @@ async def start_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSessio
 @router.post("/{trip_id}/complete", response_model=TripResponse)
 async def complete_trip(
     trip_id: uuid.UUID,
-    body: TripUpdate,
+    body: TripCompleteBody,
     current_user: CurrentUser,
     db: DbSession,
     bg: BackgroundTasks,
 ) -> Trip:
-    """El conductor finaliza su propio viaje en curso."""
+    """El conductor finaliza su propio viaje en curso. Registra odómetro y GPS de fin opcionales."""
     driver = (await db.execute(
         select(Driver).where(Driver.user_id == current_user.id, Driver.tenant_id == current_user.tenant_id)
     )).scalar_one_or_none()
@@ -305,6 +317,9 @@ async def complete_trip(
 
     trip.status = EstadoViaje.COMPLETADO
     trip.end_time = datetime.now(timezone.utc)
+    if body.end_lat is not None and body.end_lng is not None:
+        trip.end_lat = body.end_lat
+        trip.end_lng = body.end_lng
 
     if body.end_odometer and trip.start_odometer and body.end_odometer > trip.start_odometer:
         km_driven = body.end_odometer - trip.start_odometer
@@ -340,8 +355,16 @@ async def get_trip_route(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSe
         select(TripStop).where(TripStop.trip_id == trip_id).order_by(TripStop.timestamp)
     )).scalars().all()
 
-    if len(stops) < 2:
-        return {"geometry": [[s.lat, s.lng] for s in stops]}
+    # Armar la secuencia inicio → paradas → fin
+    points: list[tuple[float, float]] = []
+    if trip.start_lat is not None and trip.start_lng is not None:
+        points.append((trip.start_lat, trip.start_lng))
+    points.extend((s.lat, s.lng) for s in stops)
+    if trip.end_lat is not None and trip.end_lng is not None:
+        points.append((trip.end_lat, trip.end_lng))
+
+    if len(points) < 2:
+        return {"geometry": [[p[0], p[1]] for p in points]}
 
     if not settings.ORS_API_KEY:
         raise HTTPException(
@@ -350,7 +373,7 @@ async def get_trip_route(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSe
         )
 
     # OpenRouteService: POST con coordenadas como [lng, lat]
-    coordinates = [[s.lng, s.lat] for s in stops]
+    coordinates = [[p[1], p[0]] for p in points]
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(

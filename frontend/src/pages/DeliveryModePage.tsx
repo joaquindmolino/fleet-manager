@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MapPin, CheckCircle, AlertTriangle, Flag, ChevronLeft, Loader2 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { captureLocation } from '@/lib/geolocation'
 import type { Trip, TripStop } from '@/types'
 
 interface PendingPosition { lat: number; lng: number; accuracy: number | null }
@@ -62,10 +63,15 @@ export default function DeliveryModePage() {
   })
 
   const finishMutation = useMutation({
-    mutationFn: () =>
-      api.post(`/trips/${trip!.id}/complete`, {
+    mutationFn: async () => {
+      // Capturamos GPS de fin en background; si falla, finalizamos igual sin coords.
+      const coords = await captureLocation()
+      return api.post(`/trips/${trip!.id}/complete`, {
         end_odometer: endOdometer ? parseInt(endOdometer) : undefined,
-      }),
+        end_lat: coords?.[0],
+        end_lng: coords?.[1],
+      })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['trips', 'active'] })

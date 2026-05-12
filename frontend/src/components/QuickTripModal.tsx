@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { X, Truck, MapPin, CheckCircle, Play, Loader2 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { captureLocation } from '@/lib/geolocation'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { Driver, Trip, Client, PaginatedResponse } from '@/types'
 
@@ -57,7 +58,11 @@ export default function QuickTripModal({ driver, vehicle, onClose }: Props) {
   })
 
   const startMutation = useMutation({
-    mutationFn: (tripId: string) => api.post<Trip>(`/trips/${tripId}/start`, {}).then(r => r.data),
+    mutationFn: async (tripId: string) => {
+      const coords = await captureLocation()
+      const body = coords ? { start_lat: coords[0], start_lng: coords[1] } : {}
+      return api.post<Trip>(`/trips/${tripId}/start`, body).then(r => r.data)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trips', 'active'] })
       qc.invalidateQueries({ queryKey: ['trips', 'pending'] })

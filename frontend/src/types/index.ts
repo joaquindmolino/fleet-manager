@@ -169,6 +169,10 @@ export interface Trip {
   destination: string
   start_odometer: number | null
   end_odometer: number | null
+  start_lat: number | null
+  start_lng: number | null
+  end_lat: number | null
+  end_lng: number | null
   scheduled_date: string | null
   start_time: string | null
   end_time: string | null

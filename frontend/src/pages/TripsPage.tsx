@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
 import { Plus, Route, Play, Loader2, ChevronRight, Navigation } from 'lucide-react'
 import { api } from '@/lib/api'
+import { captureLocation } from '@/lib/geolocation'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { PaginatedResponse, Trip, Vehicle, Driver, Client } from '@/types'
@@ -75,7 +76,11 @@ export default function TripsPage() {
   })
 
   const startMutation = useMutation({
-    mutationFn: (tripId: string) => api.post<Trip>(`/trips/${tripId}/start`, {}).then(r => r.data),
+    mutationFn: async (tripId: string) => {
+      const coords = await captureLocation()
+      const body = coords ? { start_lat: coords[0], start_lng: coords[1] } : {}
+      return api.post<Trip>(`/trips/${tripId}/start`, body).then(r => r.data)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['trips', 'active'] })

@@ -56,10 +56,27 @@ class TripResponse(TripBase):
     end_odometer: int | None
     start_time: datetime | None
     end_time: datetime | None
+    start_lat: float | None = None
+    start_lng: float | None = None
+    end_lat: float | None = None
+    end_lng: float | None = None
     status: EstadoViaje
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class TripStartBody(BaseModel):
+    """Body opcional al iniciar un viaje: GPS de la ubicación de partida."""
+    start_lat: float | None = None
+    start_lng: float | None = None
+
+
+class TripCompleteBody(BaseModel):
+    """Body al finalizar un viaje: odómetro y GPS de fin (opcionales)."""
+    end_odometer: int | None = None
+    end_lat: float | None = None
+    end_lng: float | None = None
 
 
 class TripStopCreate(BaseModel):

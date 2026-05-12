@@ -6,6 +6,7 @@ import {
   Edit2, Play, X, Loader2, AlertTriangle, MapPin, Map as MapIcon,
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { captureLocation } from '@/lib/geolocation'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
 import TripStopsMapModal from '@/components/TripStopsMapModal'
@@ -101,7 +102,12 @@ export default function TripDetailPage() {
   })
 
   const startMutation = useMutation({
-    mutationFn: () => api.post<Trip>(`/trips/${id}/start`, {}).then(r => r.data),
+    mutationFn: async () => {
+      // Capturamos GPS en background; si falla, arrancamos igual sin coords.
+      const coords = await captureLocation()
+      const body = coords ? { start_lat: coords[0], start_lng: coords[1] } : {}
+      return api.post<Trip>(`/trips/${id}/start`, body).then(r => r.data)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['trips', 'active'] })
@@ -374,7 +380,15 @@ export default function TripDetailPage() {
       )}
 
       {mapOpen && stops && id && (
-        <TripStopsMapModal tripId={id} stops={stops} onClose={() => setMapOpen(false)} />
+        <TripStopsMapModal
+          tripId={id}
+          stops={stops}
+          startLat={trip.start_lat}
+          startLng={trip.start_lng}
+          endLat={trip.end_lat}
+          endLng={trip.end_lng}
+          onClose={() => setMapOpen(false)}
+        />
       )}
 
       {/* Stops list */}
