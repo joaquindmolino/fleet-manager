@@ -1,12 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MapPin, CheckCircle, AlertTriangle, Flag, ChevronLeft, Loader2 } from 'lucide-react'
+import { MapPin, CheckCircle, AlertTriangle, Flag, ChevronLeft, Loader2, Pencil, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { captureLocation } from '@/lib/geolocation'
 import type { Trip, TripStop } from '@/types'
-
-interface PendingPosition { lat: number; lng: number; accuracy: number | null }
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -22,7 +20,9 @@ export default function DeliveryModePage() {
 
   const [locating, setLocating] = useState(false)
   const [geoError, setGeoError] = useState<string | null>(null)
-  const [pendingPos, setPendingPos] = useState<PendingPosition | null>(null)
+  const [stopError, setStopError] = useState<string | null>(null)
+  const [savedToast, setSavedToast] = useState<TripStop | null>(null)
+  const [editingStop, setEditingStop] = useState<TripStop | null>(null)
   const [noteInput, setNoteInput] = useState('')
   const [showFinishModal, setShowFinishModal] = useState(false)
   const [endOdometer, setEndOdometer] = useState('')
@@ -44,21 +44,28 @@ export default function DeliveryModePage() {
     refetchInterval: 15_000,
   })
 
-  const [stopError, setStopError] = useState<string | null>(null)
-
   const stopMutation = useMutation({
-    mutationFn: (body: { lat: number; lng: number; accuracy?: number | null; notes?: string | null; timestamp: string }) =>
+    mutationFn: (body: { lat: number; lng: number; accuracy: number | null; timestamp: string }) =>
       api.post<TripStop>(`/trips/${trip!.id}/stops`, body).then(r => r.data),
-    onSuccess: () => {
+    onSuccess: (newStop) => {
       qc.invalidateQueries({ queryKey: ['trip-stops', trip!.id] })
-      setPendingPos(null)
-      setNoteInput('')
       setGeoError(null)
       setStopError(null)
+      setSavedToast(newStop)
     },
     onError: (err: { response?: { data?: { detail?: string } } }) => {
       const detail = err?.response?.data?.detail
       setStopError(detail ?? 'No se pudo guardar la entrega. Intentá de nuevo.')
+    },
+  })
+
+  const updateNoteMutation = useMutation({
+    mutationFn: ({ stopId, notes }: { stopId: string; notes: string | null }) =>
+      api.patch<TripStop>(`/trips/${trip!.id}/stops/${stopId}`, { notes }).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trip-stops', trip!.id] })
+      setEditingStop(null)
+      setNoteInput('')
     },
   })
 
@@ -68,8 +75,8 @@ export default function DeliveryModePage() {
       const coords = await captureLocation()
       return api.post(`/trips/${trip!.id}/complete`, {
         end_odometer: endOdometer ? parseInt(endOdometer) : undefined,
-        end_lat: coords?.[0],
-        end_lng: coords?.[1],
+        end_lat: coords?.lat,
+        end_lng: coords?.lng,
       })
     },
     onSuccess: () => {
@@ -80,46 +87,42 @@ export default function DeliveryModePage() {
     },
   })
 
-  function handleRegisterStop() {
-    if (!navigator.geolocation) {
-      setGeoError('Tu dispositivo no soporta geolocalización.')
+  async function handleRegisterStop() {
+    setGeoError(null)
+    setStopError(null)
+    setLocating(true)
+    const coords = await captureLocation()
+    setLocating(false)
+    if (!coords) {
+      setGeoError('No se pudo obtener la ubicación. Verificá los permisos.')
       return
     }
-    setLocating(true)
-    setGeoError(null)
-
-    function requestPosition(isRetry = false) {
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          // Algunos navegadores móviles ignoran maximumAge:0 y devuelven una posición cacheada.
-          // Si el fix tiene más de 10 s de antigüedad, reintentamos una vez para forzar una lectura fresca.
-          const ageMs = Date.now() - pos.timestamp
-          if (ageMs > 10_000 && !isRetry) {
-            requestPosition(true)
-            return
-          }
-          setLocating(false)
-          setPendingPos({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null })
-        },
-        () => {
-          setLocating(false)
-          setGeoError('No se pudo obtener la ubicación. Verificá que los permisos de ubicación estén activos.')
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-      )
-    }
-
-    requestPosition()
+    stopMutation.mutate({
+      lat: coords.lat,
+      lng: coords.lng,
+      accuracy: coords.accuracy,
+      timestamp: new Date().toISOString(),
+    })
   }
 
-  function confirmStop() {
-    if (!pendingPos) return
-    stopMutation.mutate({
-      lat: pendingPos.lat,
-      lng: pendingPos.lng,
-      accuracy: pendingPos.accuracy,
+  // El toast de "entrega guardada" se oculta a los 5s si el chofer no toca nada.
+  useEffect(() => {
+    if (!savedToast) return
+    const t = setTimeout(() => setSavedToast(null), 5000)
+    return () => clearTimeout(t)
+  }, [savedToast])
+
+  function openNoteEditor(stop: TripStop) {
+    setSavedToast(null)
+    setEditingStop(stop)
+    setNoteInput(stop.notes ?? '')
+  }
+
+  function saveNote() {
+    if (!editingStop) return
+    updateNoteMutation.mutate({
+      stopId: editingStop.id,
       notes: noteInput.trim() || null,
-      timestamp: new Date().toISOString(),
     })
   }
 
@@ -243,7 +246,12 @@ export default function DeliveryModePage() {
             ) : (
               <div className="divide-y divide-gray-50">
                 {[...stops].reverse().map((stop, i) => (
-                  <div key={stop.id} className="px-5 py-3 flex items-start gap-3">
+                  <button
+                    type="button"
+                    key={stop.id}
+                    onClick={() => openNoteEditor(stop)}
+                    className="w-full px-5 py-3 flex items-start gap-3 text-left hover:bg-gray-50 transition-colors"
+                  >
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${stop.is_extra ? 'bg-amber-100' : 'bg-blue-100'}`}>
                       {stop.is_extra
                         ? <Flag size={12} className="text-amber-600" />
@@ -262,12 +270,13 @@ export default function DeliveryModePage() {
                         )}
                       </div>
                       <p className="text-xs text-gray-400 mt-0.5">{formatTime(stop.timestamp)}</p>
-                      {stop.notes && <p className="text-xs text-gray-600 mt-1">{stop.notes}</p>}
-                      {stop.accuracy && (
-                        <p className="text-xs text-gray-300 mt-0.5">Precisión: ±{Math.round(stop.accuracy)}m</p>
-                      )}
+                      {stop.notes
+                        ? <p className="text-xs text-gray-600 mt-1">{stop.notes}</p>
+                        : <p className="text-xs text-gray-300 italic mt-1">Sin nota — tocá para agregar</p>
+                      }
                     </div>
-                  </div>
+                    <Pencil size={13} className="text-gray-300 shrink-0 mt-1" />
+                  </button>
                 ))}
               </div>
             )}
@@ -280,15 +289,15 @@ export default function DeliveryModePage() {
       <div className="shrink-0 bg-white border-t border-gray-200 px-4 pt-3 pb-5 flex flex-col gap-2">
         <button
           onClick={handleRegisterStop}
-          disabled={locating || !!pendingPos}
+          disabled={locating || stopMutation.isPending}
           className={`w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors shadow-sm ${
             reachedPlanned
               ? 'bg-amber-500 hover:bg-amber-600 text-white'
               : 'bg-blue-600 hover:bg-blue-700 text-white'
           } disabled:opacity-50`}
         >
-          {locating ? (
-            <><Loader2 size={20} className="animate-spin" /> Obteniendo ubicación...</>
+          {locating || stopMutation.isPending ? (
+            <><Loader2 size={20} className="animate-spin" /> {locating ? 'Obteniendo ubicación...' : 'Guardando...'}</>
           ) : reachedPlanned ? (
             <><Flag size={20} /> Agregar entrega extra</>
           ) : (
@@ -303,60 +312,64 @@ export default function DeliveryModePage() {
         </button>
       </div>
 
-      {/* Modal nota de entrega */}
-      {pendingPos && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
-          <div className="bg-white rounded-t-3xl w-full max-w-lg p-6 pb-8">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                <MapPin size={18} className="text-green-600" />
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">Ubicación capturada</p>
-                {pendingPos.accuracy !== null && (
-                  <p className="text-xs text-gray-400">Precisión: ±{Math.round(pendingPos.accuracy)}m</p>
-                )}
-              </div>
-            </div>
-            <div className="mb-5">
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                Nota (opcional)
-              </label>
-              <input
-                type="text"
-                value={noteInput}
-                onChange={e => setNoteInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && confirmStop()}
-                placeholder="Ej: cliente ausente, entrega en portería..."
-                autoFocus
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            {stopError && (
-              <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2">
-                <AlertTriangle size={15} className="text-red-500 shrink-0" />
-                <p className="text-xs text-red-700">{stopError}</p>
-              </div>
-            )}
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setPendingPos(null); setNoteInput(''); setStopError(null) }}
-                className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmStop}
-                disabled={stopMutation.isPending}
-                className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold rounded-xl text-sm flex items-center justify-center gap-2"
-              >
-                {stopMutation.isPending
-                  ? <Loader2 size={16} className="animate-spin" />
-                  : <CheckCircle size={16} />
-                }
-                {stopError ? 'Reintentar' : 'Confirmar'}
+      {/* Toast de entrega guardada con opción de agregar nota */}
+      {savedToast && (
+        <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 max-w-[90%]">
+          <CheckCircle size={18} className="text-green-400 shrink-0" />
+          <p className="text-sm font-medium">Entrega guardada</p>
+          <button
+            onClick={() => openNoteEditor(savedToast)}
+            className="text-xs font-semibold bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            Agregar nota
+          </button>
+          <button onClick={() => setSavedToast(null)} className="text-gray-400 hover:text-white">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Error al guardar entrega */}
+      {stopError && (
+        <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white rounded-2xl shadow-xl px-4 py-3 flex items-center gap-2 max-w-[90%]">
+          <AlertTriangle size={16} className="shrink-0" />
+          <p className="text-sm font-medium">{stopError}</p>
+          <button onClick={() => setStopError(null)} className="ml-2 text-white/70 hover:text-white">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Modal de edición de nota (post-guardado o desde la lista) */}
+      {editingStop && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setEditingStop(null)}>
+          <div className="bg-white rounded-t-3xl w-full max-w-lg p-6 pb-8" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <p className="font-semibold text-gray-900">Nota de la entrega</p>
+              <button onClick={() => setEditingStop(null)} className="text-gray-400 hover:text-gray-600 p-1">
+                <X size={18} />
               </button>
             </div>
+            <input
+              type="text"
+              value={noteInput}
+              onChange={e => setNoteInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && saveNote()}
+              placeholder="Ej: cliente ausente, entrega en portería..."
+              autoFocus
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+            />
+            <button
+              onClick={saveNote}
+              disabled={updateNoteMutation.isPending}
+              className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold rounded-xl text-sm flex items-center justify-center gap-2"
+            >
+              {updateNoteMutation.isPending
+                ? <Loader2 size={16} className="animate-spin" />
+                : <CheckCircle size={16} />
+              }
+              Guardar nota
+            </button>
           </div>
         </div>
       )}

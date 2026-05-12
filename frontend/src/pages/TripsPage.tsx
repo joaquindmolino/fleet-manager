@@ -78,7 +78,7 @@ export default function TripsPage() {
   const startMutation = useMutation({
     mutationFn: async (tripId: string) => {
       const coords = await captureLocation()
-      const body = coords ? { start_lat: coords[0], start_lng: coords[1] } : {}
+      const body = coords ? { start_lat: coords.lat, start_lng: coords.lng } : {}
       return api.post<Trip>(`/trips/${tripId}/start`, body).then(r => r.data)
     },
     onSuccess: () => {

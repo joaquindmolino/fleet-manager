@@ -87,6 +87,10 @@ class TripStopCreate(BaseModel):
     timestamp: datetime
 
 
+class TripStopUpdate(BaseModel):
+    notes: str | None = Field(None, max_length=300)
+
+
 class TripStopResponse(BaseModel):
     id: uuid.UUID
     trip_id: uuid.UUID

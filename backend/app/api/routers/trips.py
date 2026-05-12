@@ -18,7 +18,7 @@ from app.models.tire import Tire
 from app.schemas.common import PaginatedResponse
 from app.schemas.trip import (
     TripCreate, TripResponse, TripUpdate, QuickTripCreate,
-    TripStopCreate, TripStopResponse, TripStartBody, TripCompleteBody,
+    TripStopCreate, TripStopResponse, TripStopUpdate, TripStartBody, TripCompleteBody,
 )
 from app.models.trip import EstadoViaje
 from app.tasks.notifications import _async_notify_trip_assigned, _async_notify_trip_started, _async_notify_trip_completed
@@ -387,9 +387,15 @@ async def get_trip_route(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSe
                 detail=f"OpenRouteService respondió {response.status_code}",
             )
         data = response.json()
-        coords = data["features"][0]["geometry"]["coordinates"]  # [[lng, lat], ...]
+        feature = data["features"][0]
+        coords = feature["geometry"]["coordinates"]  # [[lng, lat], ...]
+        summary = feature.get("properties", {}).get("summary", {}) or {}
         # Convertimos a [lat, lng] para que el frontend lo pase directo a Leaflet
-        return {"geometry": [[c[1], c[0]] for c in coords]}
+        return {
+            "geometry": [[c[1], c[0]] for c in coords],
+            "distance_m": summary.get("distance"),
+            "duration_s": summary.get("duration"),
+        }
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -458,3 +464,29 @@ async def create_trip_stop(trip_id: uuid.UUID, body: TripStopCreate, current_use
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al guardar la entrega: {type(e).__name__}: {e}",
         )
+
+
+@router.patch("/{trip_id}/stops/{stop_id}", response_model=TripStopResponse)
+async def update_trip_stop(
+    trip_id: uuid.UUID,
+    stop_id: uuid.UUID,
+    body: TripStopUpdate,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> TripStop:
+    """Edita la nota de una entrega ya registrada (lat/lng/timestamp no se modifican)."""
+    stop = (await db.execute(
+        select(TripStop).where(
+            TripStop.id == stop_id,
+            TripStop.trip_id == trip_id,
+            TripStop.tenant_id == current_user.tenant_id,
+        )
+    )).scalar_one_or_none()
+    if stop is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entrega no encontrada.")
+
+    if body.notes is not None:
+        stop.notes = body.notes or None
+    await db.flush()
+    await db.refresh(stop)
+    return stop

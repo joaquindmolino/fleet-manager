@@ -42,6 +42,20 @@ function formatDT(dt: string | null): string {
   return new Date(dt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
+function formatDuration(seconds: number | null): string {
+  if (seconds == null || seconds < 0) return '—'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (h === 0) return `${m} min`
+  if (m === 0) return `${h} h`
+  return `${h} h ${m} min`
+}
+
+function formatKm(meters: number | null): string {
+  if (meters == null) return '—'
+  return `${(meters / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} km`
+}
+
 function Row({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-3 px-4 py-3">
@@ -81,6 +95,17 @@ export default function TripDetailPage() {
     enabled: !!id && !!trip && trip.status !== 'pendiente' && trip.status !== 'planificado',
   })
 
+  // Solo pedimos la ruta vehicular cuando el viaje terminó (para el panel de resumen).
+  // Si está en curso o sin ubicaciones, el dato cambia y no vale la pena cachear.
+  const hasAnyLocation = !!trip && (trip.start_lat != null || trip.end_lat != null || (stops && stops.length > 0))
+  const { data: routeSummary } = useQuery({
+    queryKey: ['trip-route', id],
+    queryFn: () => api.get<{ geometry: [number, number][]; distance_m: number | null; duration_s: number | null }>(`/trips/${id}/route`).then(r => r.data),
+    enabled: !!id && !!trip && trip.status === 'completado' && !!hasAnyLocation,
+    retry: false,
+    staleTime: 60 * 60 * 1000,
+  })
+
   const { data: vehicles } = useList<Vehicle>('vehicles', '/vehicles', 100, canSeeVehicles)
   const { data: drivers } = useList<Driver>('drivers', '/drivers', 100, canSeeDrivers)
 
@@ -105,7 +130,7 @@ export default function TripDetailPage() {
     mutationFn: async () => {
       // Capturamos GPS en background; si falla, arrancamos igual sin coords.
       const coords = await captureLocation()
-      const body = coords ? { start_lat: coords[0], start_lng: coords[1] } : {}
+      const body = coords ? { start_lat: coords.lat, start_lng: coords.lng } : {}
       return api.post<Trip>(`/trips/${id}/start`, body).then(r => r.data)
     },
     onSuccess: () => {
@@ -253,6 +278,59 @@ export default function TripDetailPage() {
           )}
         </div>
       )}
+
+      {/* Resumen del viaje (solo viajes completados) */}
+      {!editing && trip.status === 'completado' && (() => {
+        const durationS = trip.start_time && trip.end_time
+          ? (new Date(trip.end_time).getTime() - new Date(trip.start_time).getTime()) / 1000
+          : null
+        const deliveries = stops?.length ?? 0
+        const deliveriesPerHour = durationS && durationS > 0 && deliveries > 0
+          ? (deliveries / (durationS / 3600))
+          : null
+        // Tiempo promedio entre entregas (mediana sería más robusto, pero con 5-20 stops el promedio basta).
+        let avgBetweenS: number | null = null
+        if (stops && stops.length >= 2) {
+          const sorted = [...stops].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+          const diffs: number[] = []
+          for (let i = 1; i < sorted.length; i++) {
+            diffs.push((new Date(sorted[i].timestamp).getTime() - new Date(sorted[i - 1].timestamp).getTime()) / 1000)
+          }
+          avgBetweenS = diffs.reduce((a, b) => a + b, 0) / diffs.length
+        }
+
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 mb-4 px-4 py-4">
+            <h2 className="text-sm font-semibold text-gray-900 mb-3">Resumen del viaje</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+                <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Duración total</p>
+                <p className="text-base font-semibold text-gray-900 mt-0.5">{formatDuration(durationS)}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+                <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Distancia</p>
+                <p className="text-base font-semibold text-gray-900 mt-0.5">{formatKm(routeSummary?.distance_m ?? null)}</p>
+                {routeSummary?.duration_s != null && (
+                  <p className="text-xs text-gray-400 mt-0.5">{formatDuration(routeSummary.duration_s)} manejando</p>
+                )}
+              </div>
+              <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+                <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Entregas</p>
+                <p className="text-base font-semibold text-gray-900 mt-0.5">
+                  {deliveries}{trip.stops_count != null ? ` / ${trip.stops_count}` : ''}
+                </p>
+                {deliveriesPerHour != null && (
+                  <p className="text-xs text-gray-400 mt-0.5">{deliveriesPerHour.toFixed(1)} por hora</p>
+                )}
+              </div>
+              <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+                <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Promedio entre entregas</p>
+                <p className="text-base font-semibold text-gray-900 mt-0.5">{formatDuration(avgBetweenS)}</p>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Edit form */}
       {editing && (
