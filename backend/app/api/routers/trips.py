@@ -4,10 +4,12 @@ import uuid
 import math
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select, func
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
+from app.core.config import settings
 from app.models.coordinator import CoordinatorAssignment
 from app.models.driver import Driver
 from app.models.trip import Trip, TripStop
@@ -320,6 +322,61 @@ async def complete_trip(
     await db.refresh(trip)
     bg.add_task(_async_notify_trip_completed, str(trip.id))
     return trip
+
+
+@router.get("/{trip_id}/route", dependencies=[_can_ver])
+async def get_trip_route(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> dict:
+    """
+    Devuelve la ruta vehicular real entre las paradas del viaje (orden cronológico),
+    obtenida desde OpenRouteService. Respuesta: { geometry: [[lat, lng], ...] }
+    """
+    trip = (await db.execute(
+        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+
+    stops = (await db.execute(
+        select(TripStop).where(TripStop.trip_id == trip_id).order_by(TripStop.timestamp)
+    )).scalars().all()
+
+    if len(stops) < 2:
+        return {"geometry": [[s.lat, s.lng] for s in stops]}
+
+    if not settings.ORS_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Servicio de ruteo no configurado.",
+        )
+
+    # OpenRouteService: POST con coordenadas como [lng, lat]
+    coordinates = [[s.lng, s.lat] for s in stops]
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
+                headers={"Authorization": settings.ORS_API_KEY, "Content-Type": "application/json"},
+                json={"coordinates": coordinates},
+            )
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"OpenRouteService respondió {response.status_code}",
+            )
+        data = response.json()
+        coords = data["features"][0]["geometry"]["coordinates"]  # [[lng, lat], ...]
+        # Convertimos a [lat, lng] para que el frontend lo pase directo a Leaflet
+        return {"geometry": [[c[1], c[0]] for c in coords]}
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"No se pudo contactar al servicio de ruteo: {exc}",
+        )
+    except (KeyError, IndexError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Respuesta inválida del servicio de ruteo: {exc}",
+        )
 
 
 @router.get("/{trip_id}/stops", response_model=list[TripStopResponse], dependencies=[_can_ver])

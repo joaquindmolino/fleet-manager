@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     EMAIL_FROM: str = "Fleet Manager <noreply@fleetmanager.app>"
 
+    # OpenRouteService (ruteo vehicular)
+    ORS_API_KEY: str = ""
+
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
         if self.ENVIRONMENT == "production":

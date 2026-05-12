@@ -373,8 +373,8 @@ export default function TripDetailPage() {
         </div>
       )}
 
-      {mapOpen && stops && (
-        <TripStopsMapModal stops={stops} onClose={() => setMapOpen(false)} />
+      {mapOpen && stops && id && (
+        <TripStopsMapModal tripId={id} stops={stops} onClose={() => setMapOpen(false)} />
       )}
 
       {/* Stops list */}

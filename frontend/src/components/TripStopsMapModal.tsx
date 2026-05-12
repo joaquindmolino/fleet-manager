@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Loader2, AlertTriangle } from 'lucide-react'
+import { api } from '@/lib/api'
 import type { TripStop } from '@/types'
 
 // Leaflet se carga desde CDN en index.html y expone `L` como global.
@@ -24,27 +25,12 @@ declare global {
 }
 
 interface Props {
+  tripId: string
   stops: TripStop[]
   onClose: () => void
 }
 
-async function fetchOsrmRoute(stops: TripStop[]): Promise<[number, number][]> {
-  // Servidor demo público de OSRM. Para producción conviene migrar a un servicio
-  // pago (Mapbox, GraphHopper, OpenRouteService) o self-host. Limita ~25 waypoints
-  // y no garantiza uptime.
-  const coords = stops.map(s => `${s.lng},${s.lat}`).join(';')
-  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`OSRM ${res.status}`)
-  const data = await res.json()
-  if (data.code !== 'Ok' || !data.routes?.[0]?.geometry?.coordinates) {
-    throw new Error('OSRM sin ruta')
-  }
-  // OSRM devuelve [lng, lat]; Leaflet espera [lat, lng].
-  return (data.routes[0].geometry.coordinates as [number, number][]).map(c => [c[1], c[0]])
-}
-
-export default function TripStopsMapModal({ stops, onClose }: Props) {
+export default function TripStopsMapModal({ tripId, stops, onClose }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<LeafletMap | null>(null)
   const routeLayerRef = useRef<LeafletLayer | null>(null)
@@ -103,22 +89,24 @@ export default function TripStopsMapModal({ stops, onClose }: Props) {
 
     setTimeout(() => map.invalidateSize(), 0)
 
-    // Pedir la ruta real a OSRM y reemplazar la polilínea provisoria.
+    // Pedir la ruta real al backend (que la consulta a OpenRouteService) y
+    // reemplazar la polilínea provisoria con la geometría vehicular real.
     let cancelled = false
     if (ordered.length >= 2) {
       setRouting(true)
       setRouteError(null)
-      fetchOsrmRoute(ordered)
-        .then(coords => {
-          if (cancelled) return
+      api.get<{ geometry: [number, number][] }>(`/trips/${tripId}/route`)
+        .then(res => {
+          if (cancelled || res.data.geometry.length < 2) return
           routeLayerRef.current?.remove()
-          routeLayerRef.current = L.polyline(coords, {
+          routeLayerRef.current = L.polyline(res.data.geometry, {
             color: '#3b82f6', weight: 4, opacity: 0.85,
           }).addTo(map)
         })
-        .catch((err: Error) => {
+        .catch((err: { response?: { data?: { detail?: string } }; message?: string }) => {
           if (cancelled) return
-          setRouteError(`No se pudo calcular la ruta vehicular (${err.message}). Se muestra la línea recta entre paradas.`)
+          const detail = err?.response?.data?.detail ?? err?.message ?? 'error desconocido'
+          setRouteError(`No se pudo calcular la ruta vehicular (${detail}). Se muestra la línea recta entre paradas.`)
         })
         .finally(() => { if (!cancelled) setRouting(false) })
     }
@@ -129,7 +117,7 @@ export default function TripStopsMapModal({ stops, onClose }: Props) {
       mapRef.current = null
       routeLayerRef.current = null
     }
-  }, [ordered])
+  }, [ordered, tripId])
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex flex-col">
