@@ -16,6 +16,8 @@ export interface LeafletMap {
 export interface LeafletLayer {
   addTo: (m: LeafletMap) => LeafletLayer
   remove: () => void
+  on: (event: string, handler: () => void) => LeafletLayer
+  setIcon: (icon: unknown) => LeafletLayer
 }
 
 export interface LeafletStatic {

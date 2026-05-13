@@ -85,6 +85,45 @@ function formatDuration(s: number | null | undefined): string {
   return `${h} h ${min} min`
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
+}
+
+function buildPinIcon(L: NonNullable<typeof window.L>, color: string, label: string, alias: string | null, highlighted: boolean): unknown {
+  const size = highlighted ? 36 : 28
+  const height = highlighted ? 46 : 36
+  const stroke = highlighted ? '#facc15' : 'white'
+  const strokeWidth = highlighted ? 3 : 2
+  const fontSize = highlighted ? 13 : 10
+  const labelY = highlighted ? 22 : 18
+  const aliasBg = highlighted ? '#fef9c3' : 'white'
+  const aliasFontSize = highlighted ? 12 : 11
+  const aliasHtml = alias
+    ? `<div style="position:absolute;left:${size + 4}px;top:${highlighted ? 10 : 6}px;white-space:nowrap;background:${aliasBg};
+        border:1px solid ${color};border-radius:6px;padding:2px 6px;font:600 ${aliasFontSize}px/1.2 system-ui,sans-serif;
+        color:#111;box-shadow:0 1px 2px rgba(0,0,0,.15);pointer-events:none;">${escapeHtml(alias)}</div>`
+    : ''
+  return L.divIcon({
+    className: highlighted ? 'leaflet-pin-hovered' : '',
+    iconSize: [size, height],
+    iconAnchor: [size / 2, height],
+    html: `<div style="position:relative;">
+      <svg width="${size}" height="${height}" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg" style="display:block;">
+        <path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z"
+          fill="${color}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+        <text x="14" y="${labelY}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold"
+          fill="white" text-anchor="middle">${label}</text>
+      </svg>${aliasHtml}</div>`,
+  })
+}
+
+function shortLabel(alias: string | null, address: string): string {
+  const a = (alias ?? '').trim()
+  if (a) return a
+  const first = (address || '').split(',')[0].trim()
+  return first.length > 28 ? first.slice(0, 28) + '…' : first
+}
+
 export default function TripPlannerPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -116,6 +155,8 @@ export default function TripPlannerPage() {
   const [addingToPool, setAddingToPool] = useState(false)
   const [newPoolForm, setNewPoolForm] = useState({ alias: '', address: '', lat: null as number | null, lng: null as number | null, notes: '', pin_color: 'gray' })
   const [poolSearch, setPoolSearch] = useState('')
+  const [hoveredPoolId, setHoveredPoolId] = useState<string | null>(null)
+  const [hoveredStopId, setHoveredStopId] = useState<string | null>(null)
 
   const filteredPool = useMemo(() => {
     const q = poolSearch.trim().toLowerCase()
@@ -247,6 +288,9 @@ export default function TripPlannerPage() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<LeafletMap | null>(null)
   const layersRef = useRef<LeafletLayer[]>([])
+  const poolMarkerRefs = useRef<Map<string, LeafletLayer>>(new Map())
+  const stopMarkerRefs = useRef<Map<string, LeafletLayer>>(new Map())
+  const lastFitSigRef = useRef<string>('')
 
   useEffect(() => {
     const L = window.L
@@ -261,7 +305,7 @@ export default function TripPlannerPage() {
     return () => { map.remove(); mapRef.current = null }
   }, [])
 
-  // Redibujar todo cuando cambian datos
+  // Redibujar markers/polylines cuando cambian los datos (no en hover).
   useEffect(() => {
     const L = window.L
     const map = mapRef.current
@@ -269,45 +313,21 @@ export default function TripPlannerPage() {
 
     layersRef.current.forEach(l => l.remove())
     layersRef.current = []
+    poolMarkerRefs.current.clear()
+    stopMarkerRefs.current.clear()
 
-    const Lx = L
-    function escapeHtml(s: string): string {
-      return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
-    }
-    function pinIcon(color: string, label: string, alias: string | null) {
-      const aliasHtml = alias
-        ? `<div style="position:absolute;left:32px;top:6px;white-space:nowrap;background:white;
-            border:1px solid ${color};border-radius:6px;padding:2px 6px;font:600 11px/1.2 system-ui,sans-serif;
-            color:#111;box-shadow:0 1px 2px rgba(0,0,0,.15);pointer-events:none;">${escapeHtml(alias)}</div>`
-        : ''
-      return Lx.divIcon({
-        className: '',
-        iconSize: [28, 36],
-        iconAnchor: [14, 36],
-        html: `<div style="position:relative;">
-          <svg width="28" height="36" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg" style="display:block;">
-            <path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z"
-              fill="${color}" stroke="white" stroke-width="2"/>
-            <text x="14" y="18" font-family="Arial, sans-serif" font-size="10" font-weight="bold"
-              fill="white" text-anchor="middle">${label}</text>
-          </svg>${aliasHtml}</div>`,
-      })
-    }
-
-    function shortLabel(alias: string | null, address: string): string {
-      const a = (alias ?? '').trim()
-      if (a) return a
-      const first = (address || '').split(',')[0].trim()
-      return first.length > 28 ? first.slice(0, 28) + '…' : first
-    }
-
-    // Pool: pins con color de categoría + alias visible
+    // Pool
     pool.forEach(p => {
-      const icon = pinIcon(pinHex(p.pin_color), '', shortLabel(p.alias, p.address))
-      layersRef.current.push(L.marker([p.lat, p.lng], { icon }).addTo(map))
+      const icon = buildPinIcon(L, pinHex(p.pin_color), '', shortLabel(p.alias, p.address), false)
+      const marker = L.marker([p.lat, p.lng], { icon })
+      marker.on('mouseover', () => setHoveredPoolId(p.id))
+      marker.on('mouseout', () => setHoveredPoolId(null))
+      marker.addTo(map)
+      layersRef.current.push(marker)
+      poolMarkerRefs.current.set(p.id, marker)
     })
 
-    // Cada viaje: pins con número, alias visible, y línea con su line_color
+    // Viajes
     drafts.forEach(t => {
       const stops = stopsByTrip[t.id] ?? []
       const lineColor = t.line_color ?? '#3b82f6'
@@ -320,19 +340,47 @@ export default function TripPlannerPage() {
         }).addTo(map))
       }
       stops.forEach((s, i) => {
-        const icon = pinIcon(pinHex(s.pin_color), String(i + 1), shortLabel(s.alias, s.address))
-        layersRef.current.push(L.marker([s.lat, s.lng], { icon }).addTo(map))
+        const icon = buildPinIcon(L, pinHex(s.pin_color), String(i + 1), shortLabel(s.alias, s.address), false)
+        const marker = L.marker([s.lat, s.lng], { icon })
+        marker.on('mouseover', () => setHoveredStopId(s.id))
+        marker.on('mouseout', () => setHoveredStopId(null))
+        marker.addTo(map)
+        layersRef.current.push(marker)
+        stopMarkerRefs.current.set(s.id, marker)
       })
     })
 
-    // Fit bounds: todos los puntos
+    // Fit bounds solo si el conjunto de puntos realmente cambió.
     const allPoints: [number, number][] = [
       ...pool.map(p => [p.lat, p.lng] as [number, number]),
       ...drafts.flatMap(t => (stopsByTrip[t.id] ?? []).map(s => [s.lat, s.lng] as [number, number])),
     ]
-    if (allPoints.length === 1) map.setView(allPoints[0], 14)
-    else if (allPoints.length >= 2) map.fitBounds(L.latLngBounds(allPoints), { padding: [40, 40] })
+    const sig = allPoints.map(p => `${p[0].toFixed(5)},${p[1].toFixed(5)}`).join('|')
+    if (sig !== lastFitSigRef.current && allPoints.length > 0) {
+      if (allPoints.length === 1) map.setView(allPoints[0], 14)
+      else map.fitBounds(L.latLngBounds(allPoints), { padding: [40, 40] })
+      lastFitSigRef.current = sig
+    }
   }, [pool, drafts, stopsByTrip, tripRoutes])
+
+  // Aplicar highlight de hover sin re-renderizar todos los markers.
+  useEffect(() => {
+    const L = window.L
+    if (!L) return
+    pool.forEach(p => {
+      const m = poolMarkerRefs.current.get(p.id)
+      if (!m) return
+      m.setIcon(buildPinIcon(L, pinHex(p.pin_color), '', shortLabel(p.alias, p.address), hoveredPoolId === p.id))
+    })
+    drafts.forEach(t => {
+      const stops = stopsByTrip[t.id] ?? []
+      stops.forEach((s, i) => {
+        const m = stopMarkerRefs.current.get(s.id)
+        if (!m) return
+        m.setIcon(buildPinIcon(L, pinHex(s.pin_color), String(i + 1), shortLabel(s.alias, s.address), hoveredStopId === s.id))
+      })
+    })
+  }, [hoveredPoolId, hoveredStopId, pool, drafts, stopsByTrip])
 
   // Acciones UI
   function togglePoolSelection(id: string) {
@@ -497,6 +545,8 @@ export default function TripPlannerPage() {
                     item={p}
                     selected={selectedPoolIds.has(p.id)}
                     editing={editingPoolId === p.id}
+                    hovered={hoveredPoolId === p.id}
+                    onHoverChange={(on) => setHoveredPoolId(on ? p.id : null)}
                     onToggle={() => togglePoolSelection(p.id)}
                     onEdit={() => setEditingPoolId(p.id)}
                     onSaveEdit={(patch) => { updatePoolMutation.mutate({ id: p.id, patch }); setEditingPoolId(null) }}
@@ -566,6 +616,8 @@ export default function TripPlannerPage() {
                       drivers={drivers}
                       vehicles={vehicles}
                       expanded={expandedTripIds.has(t.id)}
+                      hoveredStopId={hoveredStopId}
+                      onStopHover={(stopId, on) => setHoveredStopId(on ? stopId : null)}
                       onToggle={() => toggleTripExpanded(t.id)}
                       onUpdate={(patch) => updateTripMutation.mutate({ id: t.id, patch })}
                       onDelete={() => deleteTripMutation.mutate(t.id)}
@@ -606,11 +658,13 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
 }
 
 function PoolItem({
-  item, selected, editing, onToggle, onEdit, onSaveEdit, onCancelEdit, onDelete,
+  item, selected, editing, hovered, onHoverChange, onToggle, onEdit, onSaveEdit, onCancelEdit, onDelete,
 }: {
   item: PoolLocation
   selected: boolean
   editing: boolean
+  hovered: boolean
+  onHoverChange: (on: boolean) => void
   onToggle: () => void
   onEdit: () => void
   onSaveEdit: (patch: Partial<PoolLocation>) => void
@@ -654,7 +708,11 @@ function PoolItem({
   }
 
   return (
-    <div className={`px-3 py-2 flex items-start gap-2 ${selected ? 'bg-blue-50' : ''}`}>
+    <div
+      onMouseEnter={() => onHoverChange(true)}
+      onMouseLeave={() => onHoverChange(false)}
+      className={`px-3 py-2 flex items-start gap-2 ${hovered ? 'bg-yellow-50 ring-1 ring-yellow-300' : selected ? 'bg-blue-50' : ''}`}
+    >
       <input
         type="checkbox"
         checked={selected}
@@ -678,7 +736,7 @@ function PoolItem({
 }
 
 function DraftTripCard({
-  trip, stops, route, drivers, vehicles, expanded, onToggle, onUpdate, onDelete, onConfirm, onReturnStop, confirming,
+  trip, stops, route, drivers, vehicles, expanded, hoveredStopId, onStopHover, onToggle, onUpdate, onDelete, onConfirm, onReturnStop, confirming,
 }: {
   trip: DraftTrip
   stops: PlannedStop[]
@@ -686,6 +744,8 @@ function DraftTripCard({
   drivers: Driver[]
   vehicles: Vehicle[]
   expanded: boolean
+  hoveredStopId: string | null
+  onStopHover: (stopId: string, on: boolean) => void
   onToggle: () => void
   onUpdate: (patch: Partial<Trip>) => void
   onDelete: () => void
@@ -761,7 +821,12 @@ function DraftTripCard({
           ) : (
             <div className="space-y-1">
               {stops.map((s, i) => (
-                <div key={s.id} className="flex items-center gap-2 px-2 py-1.5 bg-white rounded border border-gray-200">
+                <div
+                  key={s.id}
+                  onMouseEnter={() => onStopHover(s.id, true)}
+                  onMouseLeave={() => onStopHover(s.id, false)}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded border transition-colors ${hoveredStopId === s.id ? 'bg-yellow-50 border-yellow-300 ring-1 ring-yellow-300' : 'bg-white border-gray-200'}`}
+                >
                   <span
                     className="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center shrink-0"
                     style={{ backgroundColor: pinHex(s.pin_color) }}
