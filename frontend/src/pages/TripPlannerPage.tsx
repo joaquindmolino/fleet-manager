@@ -283,7 +283,7 @@ export default function TripPlannerPage() {
               <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Paradas en orden</h2>
               <span className="text-xs text-gray-400">{geocodedStops.length} de {stops.length} con dirección</span>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {stops.map((s, i) => (
                 <div
                   key={i}
@@ -291,51 +291,51 @@ export default function TripPlannerPage() {
                   onDragStart={() => handleDragStart(i)}
                   onDragOver={e => handleDragOver(e, i)}
                   onDragEnd={handleDragEnd}
-                  className={`border rounded-lg p-3 bg-gray-50 transition-opacity ${draggingIdx === i ? 'opacity-40' : 'opacity-100'} ${s.lat != null ? 'border-gray-200' : 'border-amber-200 bg-amber-50/40'}`}
+                  className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-opacity ${draggingIdx === i ? 'opacity-40' : 'opacity-100'} ${s.lat != null ? 'bg-gray-50' : 'bg-amber-50/60'}`}
                 >
-                  <div className="flex items-start gap-2">
-                    <button type="button" className="cursor-grab text-gray-300 hover:text-gray-600 mt-1.5">
-                      <GripVertical size={16} />
-                    </button>
-                    <div className="w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                      {i + 1}
-                    </div>
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <input
-                        type="text"
-                        value={s.alias}
-                        onChange={e => updateStop(i, { alias: e.target.value })}
-                        placeholder="Alias (opcional, ej: Pinzón 65)"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <AddressAutocomplete
-                        value={s.address}
-                        onChange={text => updateStop(i, { address: text, lat: null, lng: null })}
-                        onSelect={picked => updateStop(i, { address: picked.label, lat: picked.lat, lng: picked.lng })}
-                      />
-                      <div className="flex items-center gap-2">
-                        <Clock size={13} className="text-gray-400 shrink-0" />
-                        <input
-                          type="number"
-                          min="0"
-                          max="240"
-                          value={s.service_minutes}
-                          onChange={e => updateStop(i, { service_minutes: parseInt(e.target.value || '0') })}
-                          className="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-xs text-gray-500">min en la parada</span>
-                      </div>
-                    </div>
-                    <button type="button" onClick={() => removeStop(i)}
-                      className="text-gray-300 hover:text-red-500 transition-colors p-1 mt-0.5">
-                      <Trash2 size={15} />
-                    </button>
+                  <button type="button" className="cursor-grab text-gray-300 hover:text-gray-600 shrink-0">
+                    <GripVertical size={14} />
+                  </button>
+                  <div className="w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                    {i + 1}
                   </div>
+                  <input
+                    type="text"
+                    value={s.alias}
+                    onChange={e => updateStop(i, { alias: e.target.value })}
+                    placeholder="Alias"
+                    className="w-20 shrink-0 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <AddressAutocomplete
+                      value={s.address}
+                      onChange={text => updateStop(i, { address: text, lat: null, lng: null })}
+                      onSelect={picked => updateStop(i, { address: picked.label, lat: picked.lat, lng: picked.lng })}
+                      placeholder="Dirección..."
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Clock size={12} className="text-gray-400" />
+                    <input
+                      type="number"
+                      min="0"
+                      max="240"
+                      value={s.service_minutes}
+                      onChange={e => updateStop(i, { service_minutes: parseInt(e.target.value || '0') })}
+                      className="w-12 border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      title="Minutos en la parada"
+                    />
+                    <span className="text-[10px] text-gray-400">min</span>
+                  </div>
+                  <button type="button" onClick={() => removeStop(i)}
+                    className="text-gray-300 hover:text-red-500 transition-colors p-1 shrink-0">
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               ))}
               <button type="button" onClick={addStop}
-                className="w-full border-2 border-dashed border-gray-200 rounded-lg py-2.5 text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors flex items-center justify-center gap-1.5">
-                <Plus size={15} /> Agregar parada
+                className="w-full border-2 border-dashed border-gray-200 rounded-lg py-2 text-xs text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors flex items-center justify-center gap-1.5">
+                <Plus size={13} /> Agregar parada
               </button>
             </div>
           </div>
