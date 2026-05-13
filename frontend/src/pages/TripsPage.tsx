@@ -24,7 +24,7 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 function tripLink(t: { id: string; status: string }): string {
-  return t.status === 'borrador' ? `/trips/plan/${t.id}` : `/trips/${t.id}`
+  return t.status === 'borrador' ? '/trips/plan' : `/trips/${t.id}`
 }
 
 interface TF { vehicle_id: string; driver_id: string; client_id: string; associated_document: string; stops_count: string; start_odometer: string; scheduled_date: string; notes: string }
@@ -176,7 +176,7 @@ export default function TripsPage() {
         <div><h1 className="text-2xl font-bold text-gray-900">Viajes</h1><p className="text-sm text-gray-500 mt-0.5">{data?.total ?? '—'} viajes registrados</p></div>
         <div className="hidden md:flex items-center gap-2">
           <Link to="/trips/plan" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-            <MapIcon size={16} /> Planificar viaje
+            <MapIcon size={16} /> Despachador
           </Link>
           <button onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }} className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
             <Plus size={16} /> Registrar
