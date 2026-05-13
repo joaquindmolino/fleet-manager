@@ -23,6 +23,7 @@ class TripCreate(TripBase):
     driver_id: uuid.UUID | None = None
     start_time: datetime | None = None
     status: EstadoViaje | None = None
+    line_color: str | None = None
     planned_stops: list["TripPlannedStopInput"] | None = None
 
 
@@ -48,6 +49,9 @@ class TripUpdate(BaseModel):
     end_time: datetime | None = None
     status: EstadoViaje | None = None
     notes: str | None = None
+    line_color: str | None = None
+    vehicle_id: uuid.UUID | None = None
+    driver_id: uuid.UUID | None = None
 
 
 class TripResponse(TripBase):
@@ -62,6 +66,7 @@ class TripResponse(TripBase):
     start_lng: float | None = None
     end_lat: float | None = None
     end_lng: float | None = None
+    line_color: str | None = None
     status: EstadoViaje
     created_at: datetime
 
@@ -99,6 +104,8 @@ class TripPlannedStopBase(BaseModel):
     lat: float
     lng: float
     service_minutes: int = Field(15, ge=0, le=480)
+    notes: str | None = None
+    pin_color: str = Field("gray", max_length=20)
 
 
 class TripPlannedStopInput(TripPlannedStopBase):

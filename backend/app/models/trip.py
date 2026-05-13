@@ -52,6 +52,8 @@ class Trip(Base, TimestampMixin):
     client_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Color para diferenciar visualmente la línea de este viaje en el mapa del despachador.
+    line_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     vehicle: Mapped["Vehicle"] = relationship(back_populates="trips")  # noqa: F821
     driver: Mapped["Driver | None"] = relationship(back_populates="trips")  # noqa: F821
@@ -107,5 +109,8 @@ class TripPlannedStop(Base, TimestampMixin):
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lng: Mapped[float] = mapped_column(Float, nullable=False)
     service_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Color del pin: categoría de cliente / canal de venta (no del viaje).
+    pin_color: Mapped[str] = mapped_column(String(20), default="gray", nullable=False)
 
     trip: Mapped["Trip"] = relationship(back_populates="planned_stops")
