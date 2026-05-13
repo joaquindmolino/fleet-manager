@@ -47,6 +47,7 @@ export default function AddressAutocomplete({
     setError(null)
     const handle = setTimeout(() => {
       lastQueryRef.current = text
+      // Debounce 600ms: Nominatim recomienda <= 1 req/s
       api.get<Suggestion[]>('/routing/autocomplete', { params: { q: text, country } })
         .then(r => {
           setSuggestions(r.data)
@@ -60,7 +61,7 @@ export default function AddressAutocomplete({
           setOpen(true)
         })
         .finally(() => setLoading(false))
-    }, 350)
+    }, 600)
     return () => clearTimeout(handle)
   }, [value, country])
 
@@ -75,8 +76,10 @@ export default function AddressAutocomplete({
   }, [])
 
   function pick(s: Suggestion) {
+    // Solo onSelect — el parent es responsable de actualizar el texto + coords
+    // en una sola operación. Si llamáramos onChange acá, el handler del parent
+    // limpiaría las coords (ese onChange está pensado para tipeo manual).
     onSelect(s)
-    onChange(s.label)
     setOpen(false)
     setSuggestions([])
     setEmptyResult(false)

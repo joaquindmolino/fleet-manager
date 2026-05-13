@@ -28,44 +28,51 @@ class RouteRequest(BaseModel):
 async def autocomplete(
     current_user: CurrentUser,
     q: str = Query(..., min_length=2, max_length=200),
-    country: str = Query("AR", min_length=2, max_length=3),
+    country: str = Query("ar", min_length=2, max_length=3),
 ) -> list[AutocompleteSuggestion]:
-    """Sugerencias de direcciones (proxy a ORS Pelias /geocode/search).
+    """Sugerencias de direcciones via Nominatim (OpenStreetMap).
 
-    Usamos /geocode/search en lugar de /geocode/autocomplete porque el segundo
-    es muy restrictivo con queries parciales y matcheo de palabras intermedias.
+    Nominatim tiene mejor cobertura de alturas en Argentina que ORS Pelias.
+    Es gratis, sin API key, pero rate-limited a ~1 req/segundo y pide un
+    User-Agent identificable. El frontend ya debouncea las consultas.
     """
     _ = current_user  # gatear el endpoint con auth
-    if not settings.ORS_API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Servicio de geocoding no configurado.",
-        )
     params: dict = {
-        "api_key": settings.ORS_API_KEY,
-        "text": q,
-        "size": 10,
+        "q": q,
+        "format": "jsonv2",
+        "limit": 10,
+        "addressdetails": 0,
     }
     if country:
-        params["boundary.country"] = country
+        params["countrycodes"] = country.lower()
+    headers = {
+        # Nominatim Usage Policy: identificar la app con User-Agent + contacto.
+        "User-Agent": "FleetManager/0.1 (contact: support@fleetmanager.app)",
+        "Accept-Language": "es",
+    }
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             response = await client.get(
-                "https://api.openrouteservice.org/geocode/search",
+                "https://nominatim.openstreetmap.org/search",
                 params=params,
+                headers=headers,
             )
         if response.status_code != 200:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Geocoding respondió {response.status_code}: {response.text[:200]}",
+                detail=f"Geocoding respondió {response.status_code}",
             )
         data = response.json()
         suggestions: list[AutocompleteSuggestion] = []
-        for feat in data.get("features", []):
-            label = feat.get("properties", {}).get("label")
-            coords = feat.get("geometry", {}).get("coordinates")
-            if label and isinstance(coords, list) and len(coords) >= 2:
-                suggestions.append(AutocompleteSuggestion(label=label, lat=coords[1], lng=coords[0]))
+        for item in data:
+            label = item.get("display_name")
+            try:
+                lat = float(item["lat"])
+                lng = float(item["lon"])
+            except (KeyError, ValueError, TypeError):
+                continue
+            if label:
+                suggestions.append(AutocompleteSuggestion(label=label, lat=lat, lng=lng))
         return suggestions
     except httpx.HTTPError as exc:
         raise HTTPException(
