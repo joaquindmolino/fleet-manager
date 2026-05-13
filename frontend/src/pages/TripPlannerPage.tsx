@@ -83,15 +83,6 @@ function formatKm(m: number | null | undefined): string {
   return `${(m / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} km`
 }
 
-function formatDuration(s: number | null | undefined): string {
-  if (s == null) return '—'
-  const h = Math.floor(s / 3600)
-  const min = Math.floor((s % 3600) / 60)
-  if (h === 0) return `${min} min`
-  if (min === 0) return `${h} h`
-  return `${h} h ${min} min`
-}
-
 function formatMinShort(min: number): string {
   if (min < 60) return `${Math.round(min)} min`
   const h = Math.floor(min / 60)
