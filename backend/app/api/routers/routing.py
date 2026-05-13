@@ -30,28 +30,34 @@ async def autocomplete(
     q: str = Query(..., min_length=2, max_length=200),
     country: str = Query("AR", min_length=2, max_length=3),
 ) -> list[AutocompleteSuggestion]:
-    """Sugerencias de direcciones para autocomplete (proxy a ORS Pelias)."""
-    _ = current_user  # solo para gatear el endpoint con auth
+    """Sugerencias de direcciones (proxy a ORS Pelias /geocode/search).
+
+    Usamos /geocode/search en lugar de /geocode/autocomplete porque el segundo
+    es muy restrictivo con queries parciales y matcheo de palabras intermedias.
+    """
+    _ = current_user  # gatear el endpoint con auth
     if not settings.ORS_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Servicio de geocoding no configurado.",
         )
+    params: dict = {
+        "api_key": settings.ORS_API_KEY,
+        "text": q,
+        "size": 10,
+    }
+    if country:
+        params["boundary.country"] = country
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             response = await client.get(
-                "https://api.openrouteservice.org/geocode/autocomplete",
-                params={
-                    "api_key": settings.ORS_API_KEY,
-                    "text": q,
-                    "boundary.country": country,
-                    "size": 8,
-                },
+                "https://api.openrouteservice.org/geocode/search",
+                params=params,
             )
         if response.status_code != 200:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Geocoding respondió {response.status_code}",
+                detail=f"Geocoding respondió {response.status_code}: {response.text[:200]}",
             )
         data = response.json()
         suggestions: list[AutocompleteSuggestion] = []

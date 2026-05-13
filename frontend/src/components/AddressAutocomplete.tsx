@@ -34,7 +34,7 @@ export default function AddressAutocomplete({
 
   useEffect(() => {
     const text = value.trim()
-    if (text.length < 2) {
+    if (text.length < 3) {
       setSuggestions([])
       setLoading(false)
       setEmptyResult(false)
