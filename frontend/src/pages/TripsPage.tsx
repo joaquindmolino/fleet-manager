@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
-import { Plus, Route, Play, Loader2, ChevronRight, Navigation, Map as MapIcon } from 'lucide-react'
+import { Plus, Route, Play, Loader2, ChevronRight, Navigation, Map as MapIcon, FileText } from 'lucide-react'
 import { api } from '@/lib/api'
 import { captureLocation } from '@/lib/geolocation'
+import { downloadRouteSheet } from '@/lib/downloads'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { PaginatedResponse, Trip, Vehicle, Driver, Client } from '@/types'
@@ -327,6 +328,15 @@ export default function TripsPage() {
                               className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
                             >
                               {cancellingId === t.id ? 'Cancelando…' : 'Cancelar'}
+                            </button>
+                          )}
+                          {t.status !== 'cancelado' && (
+                            <button
+                              onClick={() => downloadRouteSheet(t.id, `${t.name ?? t.associated_document ?? 'hoja-de-ruta'}.pdf`).catch(() => {})}
+                              title="Descargar hoja de ruta (PDF)"
+                              className="text-xs text-gray-500 hover:text-blue-600 font-medium flex items-center gap-1"
+                            >
+                              <FileText size={12} /> PDF
                             </button>
                           )}
                           {t.status !== 'cancelado' && canEditar && (

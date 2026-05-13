@@ -3,8 +3,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Plus, Trash2, ChevronDown, ChevronRight, Loader2,
-  CheckCircle, RotateCcw, Search, X, GripVertical, MoreVertical, Flag,
+  CheckCircle, RotateCcw, Search, X, GripVertical, MoreVertical, Flag, FileText,
 } from 'lucide-react'
+import { downloadRouteSheet } from '@/lib/downloads'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
 import AddressAutocomplete from '@/components/AddressAutocomplete'
@@ -1167,6 +1168,14 @@ function DraftTripCard({
               Confirmar viaje
             </button>
           </div>
+          {stops.length > 0 && (
+            <button
+              onClick={() => downloadRouteSheet(trip.id, `${trip.name ?? 'hoja-de-ruta'}.pdf`).catch(() => {})}
+              className="w-full mt-1 border border-gray-200 text-gray-700 hover:bg-white text-xs rounded-lg py-1.5 flex items-center justify-center gap-1"
+            >
+              <FileText size={12} /> Descargar hoja de ruta (PDF)
+            </button>
+          )}
         </div>
       )}
     </div>

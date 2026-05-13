@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy import select, func, or_
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
@@ -22,6 +23,7 @@ from app.schemas.trip import (
     TripPlannedStopInput, TripPlannedStopResponse, TripPlannedStopUpdate,
 )
 from app.models.trip import EstadoViaje
+from app.services.route_sheet_pdf import RouteSheetData, RouteSheetStop, build_route_sheet_pdf
 from app.tasks.notifications import _async_notify_trip_assigned, _async_notify_trip_started, _async_notify_trip_completed
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -743,3 +745,83 @@ async def promote_stop_to_origin(
     await db.flush()
     await db.refresh(trip)
     return trip
+
+
+@router.get(
+    "/{trip_id}/route-sheet.pdf",
+    dependencies=[_can_ver],
+)
+async def download_route_sheet_pdf(
+    trip_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> Response:
+    """Genera el PDF de hoja de ruta del viaje (paradas + observaciones + QR)."""
+    tid = current_user.tenant_id
+    trip = (await db.execute(
+        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == tid)
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+
+    stops_result = (await db.execute(
+        select(TripPlannedStop)
+        .where(TripPlannedStop.trip_id == trip_id)
+        .order_by(TripPlannedStop.sequence)
+    )).scalars().all()
+
+    driver_name: str | None = None
+    if trip.driver_id:
+        d = (await db.execute(select(Driver).where(Driver.id == trip.driver_id))).scalar_one_or_none()
+        driver_name = d.full_name if d else None
+
+    veh = (await db.execute(select(Vehicle).where(Vehicle.id == trip.vehicle_id))).scalar_one_or_none()
+    plate = veh.plate if veh else None
+
+    when = trip.scheduled_date or trip.created_at
+    date_label = when.strftime("%d/%m/%Y") if when else ""
+
+    total_service_min = sum((s.service_minutes or 0) for s in stops_result)
+    if trip.name:
+        display_name = trip.name
+    elif date_label:
+        display_name = f"Viaje del {date_label}"
+    else:
+        display_name = "Hoja de ruta"
+
+    data = RouteSheetData(
+        trip_name=display_name,
+        associated_document=trip.associated_document,
+        driver_name=driver_name,
+        vehicle_plate=plate,
+        date_label=date_label or "—",
+        origin_address=trip.origin if (trip.origin and trip.origin != "Por definir") else None,
+        origin_lat=trip.start_lat,
+        origin_lng=trip.start_lng,
+        stops=[
+            RouteSheetStop(
+                sequence=s.sequence,
+                alias=s.alias,
+                address=s.address,
+                lat=s.lat,
+                lng=s.lng,
+                service_minutes=s.service_minutes,
+                notes=s.notes,
+                pin_color=s.pin_color,
+                eta_minutes=None,
+            )
+            for s in stops_result
+        ],
+        total_km=None,
+        total_drive_min=None,
+        total_service_min=total_service_min,
+    )
+
+    pdf_bytes = build_route_sheet_pdf(data)
+    safe_name = (trip.name or "hoja-de-ruta").replace(" ", "_").replace("/", "-")
+    filename = f"{safe_name}-{trip_id.hex[:8]}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
