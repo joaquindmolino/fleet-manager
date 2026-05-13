@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Plus, Trash2, ChevronDown, ChevronRight, MapPin, Loader2,
-  AlertTriangle, CheckCircle, MoreVertical, Truck, User as UserIcon, RotateCcw,
+  ArrowLeft, Plus, Trash2, ChevronDown, ChevronRight, Loader2,
+  CheckCircle, RotateCcw,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
@@ -259,8 +259,9 @@ export default function TripPlannerPage() {
     layersRef.current.forEach(l => l.remove())
     layersRef.current = []
 
+    const Lx = L
     function pinIcon(color: string, label: string) {
-      return L.divIcon({
+      return Lx.divIcon({
         className: '',
         iconSize: [28, 36],
         iconAnchor: [14, 36],
@@ -638,7 +639,6 @@ function DraftTripCard({
   confirming: boolean
 }) {
   const driver = drivers.find(d => d.id === trip.driver_id)
-  const vehicle = vehicles.find(v => v.id === trip.vehicle_id)
 
   return (
     <div>

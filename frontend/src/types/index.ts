@@ -180,6 +180,7 @@ export interface Trip {
   notes: string | null
   associated_document: string | null
   stops_count: number | null
+  line_color: string | null
   created_at: string
 }
 
