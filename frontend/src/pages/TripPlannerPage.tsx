@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Plus, Trash2, ChevronDown, ChevronRight, Loader2,
-  CheckCircle, RotateCcw,
+  CheckCircle, RotateCcw, Search, X,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
@@ -115,6 +115,17 @@ export default function TripPlannerPage() {
   const [editingPoolId, setEditingPoolId] = useState<string | null>(null)
   const [addingToPool, setAddingToPool] = useState(false)
   const [newPoolForm, setNewPoolForm] = useState({ alias: '', address: '', lat: null as number | null, lng: null as number | null, notes: '', pin_color: 'gray' })
+  const [poolSearch, setPoolSearch] = useState('')
+
+  const filteredPool = useMemo(() => {
+    const q = poolSearch.trim().toLowerCase()
+    if (!q) return pool
+    return pool.filter(p =>
+      (p.alias ?? '').toLowerCase().includes(q) ||
+      p.address.toLowerCase().includes(q) ||
+      (p.notes ?? '').toLowerCase().includes(q)
+    )
+  }, [pool, poolSearch])
 
   // Paradas planificadas por viaje (cargadas on-demand al expandir)
   const tripStopsQueries = useQuery({
@@ -402,13 +413,37 @@ export default function TripPlannerPage() {
             <section className="bg-white rounded-xl border border-gray-200">
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Pool ({pool.length})
+                  Pool ({poolSearch ? `${filteredPool.length} / ${pool.length}` : pool.length})
                 </h2>
                 <button onClick={() => setAddingToPool(v => !v)}
                   className="text-blue-600 hover:text-blue-800 text-xs font-medium flex items-center gap-1">
                   <Plus size={13} /> Agregar
                 </button>
               </div>
+
+              {/* Buscador */}
+              {pool.length > 0 && (
+                <div className="px-3 pt-2 pb-1">
+                  <div className="relative">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por alias, dirección u observación..."
+                      value={poolSearch}
+                      onChange={e => setPoolSearch(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg pl-7 pr-7 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    {poolSearch && (
+                      <button
+                        onClick={() => setPoolSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Form de agregar */}
               {addingToPool && (
@@ -452,7 +487,11 @@ export default function TripPlannerPage() {
                   <div className="p-6 text-center text-xs text-gray-400">
                     No hay ubicaciones pendientes. Tocá "Agregar" para empezar.
                   </div>
-                ) : pool.map(p => (
+                ) : filteredPool.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-gray-400">
+                    Ningún resultado para "{poolSearch}".
+                  </div>
+                ) : filteredPool.map(p => (
                   <PoolItem
                     key={p.id}
                     item={p}
