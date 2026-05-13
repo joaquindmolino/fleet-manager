@@ -22,6 +22,7 @@ class TripCreate(TripBase):
     vehicle_id: uuid.UUID
     driver_id: uuid.UUID | None = None
     start_time: datetime | None = None
+    status: EstadoViaje | None = None
     planned_stops: list["TripPlannedStopInput"] | None = None
 
 

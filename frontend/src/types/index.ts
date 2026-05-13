@@ -176,7 +176,7 @@ export interface Trip {
   scheduled_date: string | null
   start_time: string | null
   end_time: string | null
-  status: 'pendiente' | 'planificado' | 'en_curso' | 'completado' | 'cancelado'
+  status: 'borrador' | 'pendiente' | 'planificado' | 'en_curso' | 'completado' | 'cancelado'
   notes: string | null
   associated_document: string | null
   stops_count: number | null

@@ -58,6 +58,7 @@ export default function App() {
           <Route path="delivery" element={<DeliveryModePage />} />
           <Route path="trips" element={<RequirePermission module="viajes" action="ver"><TripsPage /></RequirePermission>} />
           <Route path="trips/plan" element={<RequirePermission module="viajes" action="crear"><TripPlannerPage /></RequirePermission>} />
+          <Route path="trips/plan/:id" element={<RequirePermission module="viajes" action="editar"><TripPlannerPage /></RequirePermission>} />
           <Route path="trips/:id" element={<RequirePermission module="viajes" action="ver"><TripDetailPage /></RequirePermission>} />
           <Route path="suppliers" element={<RequirePermission module="proveedores" action="ver"><SuppliersPage /></RequirePermission>} />
           <Route path="clients" element={<RequirePermission module="clientes" action="ver"><ClientsPage /></RequirePermission>} />

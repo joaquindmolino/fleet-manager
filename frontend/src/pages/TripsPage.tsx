@@ -12,14 +12,19 @@ const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none 
 const CS = CI + ' bg-white'
 
 const STATUS_LABEL: Record<string, string> = {
-  pendiente: 'Pendiente', planificado: 'Planificado', en_curso: 'En curso', completado: 'Completado', cancelado: 'Cancelado',
+  borrador: 'Borrador', pendiente: 'Pendiente', planificado: 'Planificado', en_curso: 'En curso', completado: 'Completado', cancelado: 'Cancelado',
 }
 const STATUS_COLOR: Record<string, string> = {
+  borrador: 'bg-purple-100 text-purple-700',
   pendiente: 'bg-amber-100 text-amber-700',
   planificado: 'bg-gray-100 text-gray-600',
   en_curso: 'bg-blue-100 text-blue-700',
   completado: 'bg-green-100 text-green-700',
   cancelado: 'bg-gray-100 text-gray-400',
+}
+
+function tripLink(t: { id: string; status: string }): string {
+  return t.status === 'borrador' ? `/trips/plan/${t.id}` : `/trips/${t.id}`
 }
 
 interface TF { vehicle_id: string; driver_id: string; client_id: string; associated_document: string; stops_count: string; start_odometer: string; scheduled_date: string; notes: string }
@@ -271,7 +276,7 @@ export default function TripsPage() {
                   ) : (
                     <tr key={t.id} className={row}>
                       <td className="px-3 py-3 font-medium text-gray-900">
-                        <Link to={`/trips/${t.id}`} className="hover:text-blue-600 transition-colors">
+                        <Link to={tripLink(t)} className="hover:text-blue-600 transition-colors">
                           {t.associated_document ?? <span className="text-gray-400 font-normal text-xs">Sin documento</span>}
                         </Link>
                       </td>
@@ -356,7 +361,7 @@ export default function TripsPage() {
               return (
                 <div key={t.id} className="flex items-stretch">
                   {/* Tappable left area */}
-                  <Link to={`/trips/${t.id}`} className="flex-1 min-w-0 px-4 py-3.5 space-y-0.5">
+                  <Link to={tripLink(t)} className="flex-1 min-w-0 px-4 py-3.5 space-y-0.5">
                     <p className="font-semibold text-gray-900 truncate">
                       {t.associated_document ?? t.destination}
                     </p>

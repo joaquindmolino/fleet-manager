@@ -1,12 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Trash2, GripVertical, Save, Loader2, AlertTriangle, MapPin, Clock } from 'lucide-react'
+import { useNavigate, Link, useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, Plus, Trash2, GripVertical, Save, Loader2, AlertTriangle, MapPin, Clock, CheckCircle } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
 import AddressAutocomplete from '@/components/AddressAutocomplete'
 import type { LeafletMap, LeafletLayer } from '@/lib/leaflet'
 import type { Driver, Trip, Vehicle } from '@/types'
+
+interface PlannedStopDto {
+  id: string
+  alias: string | null
+  address: string
+  lat: number
+  lng: number
+  service_minutes: number
+}
 
 interface PlannedStop {
   alias: string
@@ -49,6 +58,8 @@ function formatDuration(s: number | null): string {
 export default function TripPlannerPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { id: editingTripId } = useParams<{ id: string }>()
+  const isEditing = !!editingTripId
 
   const [driverId, setDriverId] = useState('')
   const [vehicleId, setVehicleId] = useState('')
@@ -57,16 +68,48 @@ export default function TripPlannerPage() {
   const [stops, setStops] = useState<PlannedStop[]>([emptyStop(), emptyStop()])
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [hydrated, setHydrated] = useState(false)
 
   const { data: drivers = [] } = useList<Driver>('drivers', '/drivers', 200, true)
   const { data: vehicles = [] } = useList<Vehicle>('vehicles', '/vehicles', 200, true)
+
+  // Si estamos editando un borrador existente, traemos los datos
+  const { data: editingTrip } = useQuery({
+    queryKey: ['trip', editingTripId],
+    queryFn: () => api.get<Trip>(`/trips/${editingTripId}`).then(r => r.data),
+    enabled: isEditing,
+  })
+  const { data: editingPlannedStops } = useQuery({
+    queryKey: ['trip-planned-stops', editingTripId],
+    queryFn: () => api.get<PlannedStopDto[]>(`/trips/${editingTripId}/planned-stops`).then(r => r.data),
+    enabled: isEditing,
+  })
+
+  // Cuando llegan los datos del trip a editar, llenamos el form una sola vez
+  useEffect(() => {
+    if (!isEditing || hydrated || !editingTrip || !editingPlannedStops) return
+    setDriverId(editingTrip.driver_id ?? '')
+    setVehicleId(editingTrip.vehicle_id ?? '')
+    setAssociatedDocument(editingTrip.associated_document ?? '')
+    setScheduledDate(editingTrip.scheduled_date ? editingTrip.scheduled_date.slice(0, 10) : '')
+    if (editingPlannedStops.length > 0) {
+      setStops(editingPlannedStops.map(ps => ({
+        alias: ps.alias ?? '',
+        address: ps.address,
+        lat: ps.lat,
+        lng: ps.lng,
+        service_minutes: ps.service_minutes,
+      })))
+    }
+    setHydrated(true)
+  }, [isEditing, hydrated, editingTrip, editingPlannedStops])
 
   // Al elegir chofer, autocompletar vehículo si el chofer tiene uno asignado
   useEffect(() => {
     if (!driverId) return
     const d = drivers.find(x => x.id === driverId)
-    if (d?.vehicle_id) setVehicleId(d.vehicle_id)
-  }, [driverId, drivers])
+    if (d?.vehicle_id && !vehicleId) setVehicleId(d.vehicle_id)
+  }, [driverId, drivers, vehicleId])
 
   // Paradas con coords ya resueltas (descarta las que aún no tienen address geocodificado)
   const geocodedStops = useMemo(
@@ -229,28 +272,13 @@ export default function TripPlannerPage() {
   }
   function handleDragEnd() { setDraggingIdx(null) }
 
-  const createMutation = useMutation({
-    mutationFn: (body: object) => api.post<Trip>('/trips', body).then(r => r.data),
-    onSuccess: (trip) => {
-      qc.invalidateQueries({ queryKey: ['trips'] })
-      qc.invalidateQueries({ queryKey: ['stats'] })
-      navigate(`/trips/${trip.id}`)
-    },
-    onError: (err: { response?: { data?: { detail?: string } } }) => {
-      setSubmitError(err?.response?.data?.detail ?? 'No se pudo crear el viaje.')
-    },
-  })
-
-  function handleSubmit() {
-    setSubmitError(null)
-    if (!vehicleId) { setSubmitError('Elegí un vehículo.'); return }
-    if (geocodedStops.length < 2) {
-      setSubmitError('Cargá al menos 2 paradas con dirección válida.')
-      return
-    }
-    const origin = geocodedStops[0].alias || geocodedStops[0].address.split(',')[0]
-    const destination = geocodedStops[geocodedStops.length - 1].alias || geocodedStops[geocodedStops.length - 1].address.split(',')[0]
-    createMutation.mutate({
+  // Body común que se manda al backend en cualquier modo
+  function buildBody(status: 'borrador' | 'pendiente') {
+    const origin = geocodedStops[0]?.alias || geocodedStops[0]?.address?.split(',')[0] || ''
+    const destination = geocodedStops[geocodedStops.length - 1]?.alias
+      || geocodedStops[geocodedStops.length - 1]?.address?.split(',')[0]
+      || ''
+    return {
       vehicle_id: vehicleId,
       driver_id: driverId || null,
       origin,
@@ -258,14 +286,86 @@ export default function TripPlannerPage() {
       associated_document: associatedDocument || null,
       scheduled_date: scheduledDate ? new Date(scheduledDate).toISOString() : null,
       stops_count: geocodedStops.length,
-      planned_stops: geocodedStops.map(s => ({
-        alias: s.alias || null,
-        address: s.address,
-        lat: s.lat,
-        lng: s.lng,
-        service_minutes: s.service_minutes,
-      })),
-    })
+      status,
+    }
+  }
+
+  function plannedStopsPayload() {
+    return geocodedStops.map(s => ({
+      alias: s.alias || null,
+      address: s.address,
+      lat: s.lat,
+      lng: s.lng,
+      service_minutes: s.service_minutes,
+    }))
+  }
+
+  function invalidateAll() {
+    qc.invalidateQueries({ queryKey: ['trips'] })
+    qc.invalidateQueries({ queryKey: ['stats'] })
+    if (editingTripId) {
+      qc.invalidateQueries({ queryKey: ['trip', editingTripId] })
+      qc.invalidateQueries({ queryKey: ['trip-planned-stops', editingTripId] })
+    }
+  }
+
+  const saveDraftMutation = useMutation({
+    mutationFn: async () => {
+      const body = buildBody('borrador')
+      if (isEditing && editingTripId) {
+        const { status: _status, ...patchable } = body
+        await api.patch(`/trips/${editingTripId}`, { ...patchable, status: 'borrador' })
+        await api.put(`/trips/${editingTripId}/planned-stops`, plannedStopsPayload())
+        return { id: editingTripId }
+      } else {
+        const r = await api.post<Trip>('/trips', { ...body, planned_stops: plannedStopsPayload() })
+        return { id: r.data.id }
+      }
+    },
+    onSuccess: ({ id }) => {
+      invalidateAll()
+      setSubmitError(null)
+      if (!isEditing) navigate(`/trips/plan/${id}`)
+    },
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
+      setSubmitError(err?.response?.data?.detail ?? 'No se pudo guardar el borrador.')
+    },
+  })
+
+  const confirmMutation = useMutation({
+    mutationFn: async () => {
+      if (geocodedStops.length < 2) {
+        throw { response: { data: { detail: 'Necesitás al menos 2 paradas con dirección válida.' } } }
+      }
+      const body = buildBody('pendiente')
+      if (isEditing && editingTripId) {
+        await api.patch(`/trips/${editingTripId}`, body)
+        await api.put(`/trips/${editingTripId}/planned-stops`, plannedStopsPayload())
+        return { id: editingTripId }
+      } else {
+        const r = await api.post<Trip>('/trips', { ...body, planned_stops: plannedStopsPayload() })
+        return { id: r.data.id }
+      }
+    },
+    onSuccess: ({ id }) => {
+      invalidateAll()
+      navigate(`/trips/${id}`)
+    },
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
+      setSubmitError(err?.response?.data?.detail ?? 'No se pudo confirmar el viaje.')
+    },
+  })
+
+  function handleSaveDraft() {
+    setSubmitError(null)
+    if (!vehicleId) { setSubmitError('Elegí un vehículo.'); return }
+    saveDraftMutation.mutate()
+  }
+
+  function handleConfirm() {
+    setSubmitError(null)
+    if (!vehicleId) { setSubmitError('Elegí un vehículo.'); return }
+    confirmMutation.mutate()
   }
 
   return (
@@ -274,8 +374,14 @@ export default function TripPlannerPage() {
         <ArrowLeft size={16} /> Viajes
       </Link>
 
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Planificar viaje</h1>
-      <p className="text-sm text-gray-500 mb-6">Definí las paradas en orden. El recorrido se calcula automáticamente.</p>
+      <h1 className="text-2xl font-bold text-gray-900 mb-1">
+        {isEditing ? 'Editar planificación' : 'Planificar viaje'}
+      </h1>
+      <p className="text-sm text-gray-500 mb-6">
+        {isEditing
+          ? 'Editá las paradas y datos del viaje en borrador. Confirmá cuando esté listo para despachar.'
+          : 'Definí las paradas en orden. Podés guardar como borrador y seguir editándolo después.'}
+      </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
@@ -418,15 +524,26 @@ export default function TripPlannerPage() {
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={createMutation.isPending}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
-            >
-              {createMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              {createMutation.isPending ? 'Creando...' : 'Confirmar y crear viaje'}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                disabled={saveDraftMutation.isPending || confirmMutation.isPending}
+                className="flex-1 border border-gray-300 hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                {saveDraftMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                {saveDraftMutation.isPending ? 'Guardando...' : 'Guardar borrador'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={saveDraftMutation.isPending || confirmMutation.isPending}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                {confirmMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
+                {confirmMutation.isPending ? 'Confirmando...' : isEditing ? 'Confirmar viaje' : 'Confirmar y crear viaje'}
+              </button>
+            </div>
           </div>
         </div>
 

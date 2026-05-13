@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 
 from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
 from app.core.config import settings
@@ -176,9 +176,14 @@ async def list_trips(
     count_q = select(func.count()).select_from(Trip).where(Trip.tenant_id == current_user.tenant_id)
 
     scope_type, scope_ids = await _get_trip_scope(current_user, db)
-    if scope_type in ("driver", "coordinator"):
+    if scope_type == "driver":
         query = query.where(Trip.driver_id.in_(scope_ids))
         count_q = count_q.where(Trip.driver_id.in_(scope_ids))
+    elif scope_type == "coordinator":
+        # Coordinadores: ven su equipo + borradores sin driver asignado (en construcción)
+        cond = or_(Trip.driver_id.in_(scope_ids), Trip.driver_id.is_(None))
+        query = query.where(cond)
+        count_q = count_q.where(cond)
 
     if vehicle_id:
         query = query.where(Trip.vehicle_id == vehicle_id)
@@ -196,7 +201,7 @@ async def list_trips(
 
 @router.post("", response_model=TripResponse, status_code=status.HTTP_201_CREATED, dependencies=[_can_crear])
 async def create_trip(body: TripCreate, current_user: CurrentUser, db: DbSession, bg: BackgroundTasks) -> Trip:
-    data = body.model_dump(exclude={"planned_stops"})
+    data = body.model_dump(exclude={"planned_stops"}, exclude_unset=True)
     trip = Trip(tenant_id=current_user.tenant_id, **data)
     db.add(trip)
     await db.flush()
@@ -228,8 +233,10 @@ async def create_trip(body: TripCreate, current_user: CurrentUser, db: DbSession
 async def get_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> Trip:
     query = select(Trip).where(Trip.id == trip_id, Trip.tenant_id == current_user.tenant_id)
     scope_type, scope_ids = await _get_trip_scope(current_user, db)
-    if scope_type in ("driver", "coordinator"):
+    if scope_type == "driver":
         query = query.where(Trip.driver_id.in_(scope_ids))
+    elif scope_type == "coordinator":
+        query = query.where(or_(Trip.driver_id.in_(scope_ids), Trip.driver_id.is_(None)))
     trip = (await db.execute(query)).scalar_one_or_none()
     if trip is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado")
