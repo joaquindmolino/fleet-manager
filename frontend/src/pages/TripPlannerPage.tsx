@@ -309,6 +309,21 @@ export default function TripPlannerPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['all-trip-planned-stops'] }),
   })
 
+  const updateStopMutation = useMutation({
+    mutationFn: ({ tripId, stopId, patch }: { tripId: string; stopId: string; patch: Partial<PlannedStop> }) =>
+      api.patch(`/trips/${tripId}/planned-stops/${stopId}`, patch).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['all-trip-planned-stops'] }),
+  })
+
+  const promoteToOriginMutation = useMutation({
+    mutationFn: ({ tripId, stopId }: { tripId: string; stopId: string }) =>
+      api.post(`/trips/${tripId}/planned-stops/${stopId}/promote-to-origin`).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trips', 'drafts'] })
+      qc.invalidateQueries({ queryKey: ['all-trip-planned-stops'] })
+    },
+  })
+
   const updateTripMutation = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Partial<Trip> }) =>
       api.patch(`/trips/${id}`, patch).then(r => r.data),
@@ -692,6 +707,8 @@ export default function TripPlannerPage() {
                       onReturnStop={(stopId) => returnToPoolMutation.mutate({ tripId: t.id, stopId })}
                       onReorder={(stopIds) => reorderStopsMutation.mutate({ tripId: t.id, stopIds })}
                       onMoveStop={(stopId, targetTripId) => moveStopMutation.mutate({ tripId: t.id, stopId, targetTripId })}
+                      onUpdateStop={(stopId, patch) => updateStopMutation.mutate({ tripId: t.id, stopId, patch })}
+                      onPromoteToOrigin={(stopId) => promoteToOriginMutation.mutate({ tripId: t.id, stopId })}
                       confirming={confirmTripMutation.isPending}
                     />
                   ))}
@@ -805,7 +822,7 @@ function PoolItem({
 }
 
 function DraftTripCard({
-  trip, stops, route, drivers, vehicles, otherDrafts, expanded, hoveredStopId, onStopHover, onToggle, onUpdate, onDelete, onConfirm, onReturnStop, onReorder, onMoveStop, confirming,
+  trip, stops, route, drivers, vehicles, otherDrafts, expanded, hoveredStopId, onStopHover, onToggle, onUpdate, onDelete, onConfirm, onReturnStop, onReorder, onMoveStop, onUpdateStop, onPromoteToOrigin, confirming,
 }: {
   trip: DraftTrip
   stops: PlannedStop[]
@@ -823,6 +840,8 @@ function DraftTripCard({
   onReturnStop: (stopId: string) => void
   onReorder: (stopIds: string[]) => void
   onMoveStop: (stopId: string, targetTripId: string) => void
+  onUpdateStop: (stopId: string, patch: Partial<PlannedStop>) => void
+  onPromoteToOrigin: (stopId: string) => void
   confirming: boolean
 }) {
   const driver = drivers.find(d => d.id === trip.driver_id)
@@ -851,6 +870,13 @@ function DraftTripCard({
 
   const defaultName = `Viaje del ${new Date(trip.created_at).toLocaleDateString('es-AR')}`
   const hasOrigin = trip.start_lat != null && trip.start_lng != null
+  // State local del input de Inicio: mientras escribís no impactamos al server.
+  // Solo persistimos cuando se elige una sugerencia.
+  const [originText, setOriginText] = useState<string>(hasOrigin ? trip.origin : '')
+  useEffect(() => {
+    setOriginText(hasOrigin ? trip.origin : '')
+  }, [trip.origin, hasOrigin])
+  const [originDropOver, setOriginDropOver] = useState(false)
 
   // Tiempos por parada (acumulados desde el inicio):
   // segments[i] es el tramo del coord[i] al coord[i+1]. coord[0] es origen si está, sino la primera parada.
@@ -942,16 +968,42 @@ function DraftTripCard({
           </div>
 
           {/* Inicio del viaje */}
-          <div className="space-y-1 pt-1">
+          <div
+            className={`space-y-1 pt-1 -mx-1 px-1 py-1 rounded transition-colors ${originDropOver ? 'bg-green-50 ring-1 ring-green-300' : ''}`}
+            onDragOver={(e) => {
+              if (!dragStopIdRef.current) return
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+              if (!originDropOver) setOriginDropOver(true)
+            }}
+            onDragLeave={() => setOriginDropOver(false)}
+            onDrop={(e) => {
+              const draggedId = dragStopIdRef.current
+              setOriginDropOver(false)
+              if (!draggedId) return
+              e.preventDefault()
+              dragStopIdRef.current = null
+              setDragStopId(null)
+              setDropTarget(null)
+              onPromoteToOrigin(draggedId)
+            }}
+          >
             <label className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold flex items-center gap-1">
               <Flag size={10} /> Inicio del viaje
+              {originDropOver && <span className="text-green-600 normal-case">— soltá para usar como inicio</span>}
             </label>
             <AddressAutocomplete
-              value={hasOrigin ? trip.origin : ''}
+              value={originText}
               onChange={text => {
-                if (!text.trim()) onUpdate({ origin: 'Por definir', start_lat: null, start_lng: null })
+                setOriginText(text)
+                if (!text.trim() && hasOrigin) {
+                  onUpdate({ origin: 'Por definir', start_lat: null, start_lng: null })
+                }
               }}
-              onSelect={picked => onUpdate({ origin: picked.label, start_lat: picked.lat, start_lng: picked.lng })}
+              onSelect={picked => {
+                setOriginText(picked.label)
+                onUpdate({ origin: picked.label, start_lat: picked.lat, start_lng: picked.lng })
+              }}
             />
           </div>
 
@@ -1019,32 +1071,63 @@ function DraftTripCard({
                           {s.notes && <p className="text-[10px] text-gray-500 italic truncate">{s.notes}</p>}
                         </div>
                       </div>
-                      {otherDrafts.length > 0 && (
-                        <div className="relative shrink-0">
-                          <button
-                            onClick={() => setMoveMenuStopId(moveMenuStopId === s.id ? null : s.id)}
-                            title="Mover a otro viaje"
-                            className="text-gray-600 hover:text-blue-600 p-0.5"
-                          >
-                            <MoreVertical size={12} />
-                          </button>
-                          {moveMenuStopId === s.id && (
-                            <div className="absolute right-0 top-5 z-20 bg-white border border-gray-200 rounded-lg shadow-md py-1 min-w-[160px]">
-                              <p className="px-3 py-1 text-[10px] text-gray-400 uppercase tracking-wide">Mover a:</p>
-                              {otherDrafts.map(t => (
-                                <button
-                                  key={t.id}
-                                  onClick={() => { onMoveStop(s.id, t.id); setMoveMenuStopId(null) }}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 text-left"
-                                >
-                                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.line_color ?? '#6b7280' }} />
-                                  <span className="truncate">{t.name ?? `Viaje del ${new Date(t.created_at).toLocaleDateString('es-AR')}`}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-0.5 shrink-0 text-[10px] text-gray-500" onMouseDown={e => e.stopPropagation()}>
+                        <input
+                          type="number"
+                          min={0}
+                          max={480}
+                          step={1}
+                          defaultValue={s.service_minutes}
+                          key={`sm-${s.id}-${s.service_minutes}`}
+                          onBlur={e => {
+                            const v = parseInt(e.target.value, 10)
+                            if (!isNaN(v) && v !== s.service_minutes) onUpdateStop(s.id, { service_minutes: v })
+                          }}
+                          onClick={e => e.stopPropagation()}
+                          onMouseDown={e => e.stopPropagation()}
+                          onDragStart={e => e.preventDefault()}
+                          className="w-9 text-center bg-transparent border border-gray-200 rounded px-0.5 py-0 text-[10px] focus:outline-none focus:ring-1 focus:ring-blue-300"
+                          title="Tiempo de servicio en minutos"
+                          draggable={false}
+                        />
+                        <span>min</span>
+                      </div>
+                      <div className="relative shrink-0">
+                        <button
+                          onClick={() => setMoveMenuStopId(moveMenuStopId === s.id ? null : s.id)}
+                          title="Más opciones"
+                          className="text-gray-600 hover:text-blue-600 p-0.5"
+                        >
+                          <MoreVertical size={12} />
+                        </button>
+                        {moveMenuStopId === s.id && (
+                          <div className="absolute right-0 top-5 z-20 bg-white border border-gray-200 rounded-lg shadow-md py-1 min-w-[180px]">
+                            <button
+                              onClick={() => { onPromoteToOrigin(s.id); setMoveMenuStopId(null) }}
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 text-left"
+                            >
+                              <Flag size={11} className="text-green-600" />
+                              <span>Marcar como inicio</span>
+                            </button>
+                            {otherDrafts.length > 0 && (
+                              <>
+                                <div className="border-t border-gray-100 my-1" />
+                                <p className="px-3 py-1 text-[10px] text-gray-400 uppercase tracking-wide">Mover a:</p>
+                                {otherDrafts.map(t => (
+                                  <button
+                                    key={t.id}
+                                    onClick={() => { onMoveStop(s.id, t.id); setMoveMenuStopId(null) }}
+                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 text-left"
+                                  >
+                                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.line_color ?? '#6b7280' }} />
+                                    <span className="truncate">{t.name ?? `Viaje del ${new Date(t.created_at).toLocaleDateString('es-AR')}`}</span>
+                                  </button>
+                                ))}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <button onClick={() => onReturnStop(s.id)} title="Devolver al pool"
                         className="text-gray-600 hover:text-blue-600 shrink-0">
                         <RotateCcw size={12} />

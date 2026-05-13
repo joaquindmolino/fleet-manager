@@ -19,7 +19,7 @@ from app.schemas.common import PaginatedResponse
 from app.schemas.trip import (
     TripCreate, TripResponse, TripUpdate, QuickTripCreate,
     TripStopCreate, TripStopResponse, TripStopUpdate, TripStartBody, TripCompleteBody,
-    TripPlannedStopInput, TripPlannedStopResponse,
+    TripPlannedStopInput, TripPlannedStopResponse, TripPlannedStopUpdate,
 )
 from app.models.trip import EstadoViaje
 from app.tasks.notifications import _async_notify_trip_assigned, _async_notify_trip_started, _async_notify_trip_completed
@@ -674,3 +674,72 @@ async def move_stop_to_other_trip(
     await db.flush()
     await db.refresh(stop)
     return stop
+
+
+@router.patch(
+    "/{trip_id}/planned-stops/{stop_id}",
+    response_model=TripPlannedStopResponse,
+    dependencies=[_can_editar],
+)
+async def update_planned_stop(
+    trip_id: uuid.UUID,
+    stop_id: uuid.UUID,
+    body: TripPlannedStopUpdate,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> TripPlannedStop:
+    """Actualiza alias, service_minutes, notes o pin_color de una parada planificada."""
+    tid = current_user.tenant_id
+    stop = (await db.execute(
+        select(TripPlannedStop).where(
+            TripPlannedStop.id == stop_id,
+            TripPlannedStop.trip_id == trip_id,
+            TripPlannedStop.tenant_id == tid,
+        )
+    )).scalar_one_or_none()
+    if stop is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parada no encontrada.")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(stop, field, value)
+    await db.flush()
+    await db.refresh(stop)
+    return stop
+
+
+@router.post(
+    "/{trip_id}/planned-stops/{stop_id}/promote-to-origin",
+    response_model=TripResponse,
+    dependencies=[_can_editar],
+)
+async def promote_stop_to_origin(
+    trip_id: uuid.UUID,
+    stop_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> Trip:
+    """Convierte una parada planificada en el inicio del viaje y la elimina del listado."""
+    tid = current_user.tenant_id
+    trip = (await db.execute(
+        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == tid)
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+    stop = (await db.execute(
+        select(TripPlannedStop).where(
+            TripPlannedStop.id == stop_id,
+            TripPlannedStop.trip_id == trip_id,
+            TripPlannedStop.tenant_id == tid,
+        )
+    )).scalar_one_or_none()
+    if stop is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parada no encontrada.")
+
+    trip.origin = stop.address
+    trip.start_lat = stop.lat
+    trip.start_lng = stop.lng
+
+    from sqlalchemy import delete as sa_delete
+    await db.execute(sa_delete(TripPlannedStop).where(TripPlannedStop.id == stop_id))
+    await db.flush()
+    await db.refresh(trip)
+    return trip

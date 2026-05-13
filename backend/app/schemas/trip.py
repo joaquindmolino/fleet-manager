@@ -112,6 +112,13 @@ class TripPlannedStopBase(BaseModel):
     pin_color: str = Field("gray", max_length=20)
 
 
+class TripPlannedStopUpdate(BaseModel):
+    alias: str | None = Field(None, max_length=100)
+    service_minutes: int | None = Field(None, ge=0, le=480)
+    notes: str | None = None
+    pin_color: str | None = Field(None, max_length=20)
+
+
 class TripPlannedStopInput(TripPlannedStopBase):
     """Input al crear o reemplazar paradas planificadas (sin sequence, lo asigna el server)."""
     pass
