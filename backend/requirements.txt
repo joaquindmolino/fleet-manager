@@ -36,7 +36,6 @@ pytz==2024.2
 
 # Generación de PDFs (hoja de ruta del chofer)
 reportlab==4.2.5
-qrcode[pil]==7.4.2
 
 # Testing
 pytest==8.3.3
