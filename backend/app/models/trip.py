@@ -57,6 +57,11 @@ class Trip(Base, TimestampMixin):
     )
     # Color para diferenciar visualmente la línea de este viaje en el mapa del despachador.
     line_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Token público (UUID) para compartir la hoja de ruta sin autenticación.
+    # Se genera lazy la primera vez que el coordinador pide el link.
+    share_token: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, unique=True, index=True,
+    )
 
     vehicle: Mapped["Vehicle"] = relationship(back_populates="trips")  # noqa: F821
     driver: Mapped["Driver | None"] = relationship(back_populates="trips")  # noqa: F821

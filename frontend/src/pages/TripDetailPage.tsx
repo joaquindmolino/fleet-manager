@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { captureLocation } from '@/lib/geolocation'
-import { downloadRouteSheet } from '@/lib/downloads'
+import { RouteSheetActions } from '@/pages/TripPlannerPage'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
 import TripStopsMapModal from '@/components/TripStopsMapModal'
@@ -453,13 +453,10 @@ export default function TripDetailPage() {
             </>
           )}
           {id && (
-            <button
-              onClick={() => downloadRouteSheet(id, `${trip.name ?? 'hoja-de-ruta'}.pdf`).catch(() => {})}
-              className="w-full flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium py-3 rounded-xl transition-colors text-sm"
-            >
-              <FileText size={15} />
-              Descargar hoja de ruta (PDF)
-            </button>
+            <div className="pt-1">
+              <p className="text-xs text-gray-500 mb-1 px-1">Hoja de ruta:</p>
+              <RouteSheetActions tripId={id} tripName={trip.name} />
+            </div>
           )}
         </div>
       )}

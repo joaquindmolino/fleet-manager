@@ -825,3 +825,51 @@ async def download_route_sheet_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
+
+
+@router.post(
+    "/{trip_id}/share-token",
+    dependencies=[_can_ver],
+)
+async def get_or_create_share_token(
+    trip_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> dict:
+    """Devuelve el token público del viaje, generándolo la primera vez.
+
+    El token es un UUID4 difícil de adivinar. Cualquiera con el link puede
+    descargar la hoja de ruta sin autenticación.
+    """
+    tid = current_user.tenant_id
+    trip = (await db.execute(
+        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == tid)
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+    if trip.share_token is None:
+        trip.share_token = uuid.uuid4()
+        await db.flush()
+        await db.refresh(trip)
+    return {"token": str(trip.share_token)}
+
+
+@router.delete(
+    "/{trip_id}/share-token",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[_can_editar],
+)
+async def revoke_share_token(
+    trip_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> None:
+    """Revoca el link público actual. Si se vuelve a pedir, se genera uno nuevo."""
+    tid = current_user.tenant_id
+    trip = (await db.execute(
+        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == tid)
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+    trip.share_token = None
+    await db.flush()

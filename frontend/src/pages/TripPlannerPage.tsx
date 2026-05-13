@@ -4,8 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Plus, Trash2, ChevronDown, ChevronRight, Loader2,
   CheckCircle, RotateCcw, Search, X, GripVertical, MoreVertical, Flag, FileText,
+  Share2, Link as LinkIcon,
 } from 'lucide-react'
-import { downloadRouteSheet } from '@/lib/downloads'
+import { downloadRouteSheet, shareRouteSheetFile, copyPublicRouteSheetUrl } from '@/lib/downloads'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
 import AddressAutocomplete from '@/components/AddressAutocomplete'
@@ -1160,15 +1161,69 @@ function DraftTripCard({
             </button>
           </div>
           {stops.length > 0 && (
-            <button
-              onClick={() => downloadRouteSheet(trip.id, `${trip.name ?? 'hoja-de-ruta'}.pdf`).catch(() => {})}
-              className="w-full mt-1 border border-gray-200 text-gray-700 hover:bg-white text-xs rounded-lg py-1.5 flex items-center justify-center gap-1"
-            >
-              <FileText size={12} /> Descargar hoja de ruta (PDF)
-            </button>
+            <RouteSheetActions tripId={trip.id} tripName={trip.name} />
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+export function RouteSheetActions({ tripId, tripName }: { tripId: string; tripName: string | null }) {
+  const filename = `${tripName ?? 'hoja-de-ruta'}.pdf`
+  const [copied, setCopied] = useState(false)
+  const [busy, setBusy] = useState<'download' | 'share' | 'copy' | null>(null)
+
+  async function handleCopy() {
+    setBusy('copy')
+    try {
+      await copyPublicRouteSheetUrl(tripId)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    } catch (e) {
+      alert('No se pudo copiar el link.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleShare() {
+    setBusy('share')
+    try {
+      await shareRouteSheetFile(tripId, filename)
+    } catch (e) {
+      alert('No se pudo compartir el PDF.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleDownload() {
+    setBusy('download')
+    try {
+      await downloadRouteSheet(tripId, filename)
+    } catch (e) {
+      alert('No se pudo descargar el PDF.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const btn = "flex-1 border border-gray-200 text-gray-700 hover:bg-white disabled:opacity-50 text-xs rounded-lg py-1.5 flex items-center justify-center gap-1"
+  return (
+    <div className="flex gap-2 mt-2">
+      <button onClick={handleDownload} disabled={busy !== null} className={btn} title="Descargar PDF">
+        {busy === 'download' ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+        <span className="hidden sm:inline">PDF</span>
+      </button>
+      <button onClick={handleShare} disabled={busy !== null} className={btn} title="Compartir PDF">
+        {busy === 'share' ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />}
+        <span className="hidden sm:inline">Compartir</span>
+      </button>
+      <button onClick={handleCopy} disabled={busy !== null} className={`${btn} ${copied ? 'border-green-300 text-green-700 bg-green-50' : ''}`} title="Copiar link público">
+        {busy === 'copy' ? <Loader2 size={12} className="animate-spin" /> : copied ? <CheckCircle size={12} /> : <LinkIcon size={12} />}
+        <span className="hidden sm:inline">{copied ? 'Copiado' : 'Link'}</span>
+      </button>
     </div>
   )
 }

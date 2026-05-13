@@ -182,6 +182,7 @@ export interface Trip {
   associated_document: string | null
   stops_count: number | null
   line_color: string | null
+  share_token: string | null
   created_at: string
 }
 

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
-import { Plus, Route, Play, Loader2, ChevronRight, Navigation, Map as MapIcon, FileText } from 'lucide-react'
+import { Plus, Route, Play, Loader2, ChevronRight, Navigation, Map as MapIcon, FileText, Link as LinkIcon } from 'lucide-react'
 import { api } from '@/lib/api'
 import { captureLocation } from '@/lib/geolocation'
-import { downloadRouteSheet } from '@/lib/downloads'
+import { downloadRouteSheet, copyPublicRouteSheetUrl } from '@/lib/downloads'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { PaginatedResponse, Trip, Vehicle, Driver, Client } from '@/types'
@@ -331,13 +331,29 @@ export default function TripsPage() {
                             </button>
                           )}
                           {t.status !== 'cancelado' && (
-                            <button
-                              onClick={() => downloadRouteSheet(t.id, `${t.name ?? t.associated_document ?? 'hoja-de-ruta'}.pdf`).catch(() => {})}
-                              title="Descargar hoja de ruta (PDF)"
-                              className="text-xs text-gray-500 hover:text-blue-600 font-medium flex items-center gap-1"
-                            >
-                              <FileText size={12} /> PDF
-                            </button>
+                            <>
+                              <button
+                                onClick={() => downloadRouteSheet(t.id, `${t.name ?? t.associated_document ?? 'hoja-de-ruta'}.pdf`).catch(() => {})}
+                                title="Descargar hoja de ruta (PDF)"
+                                className="text-xs text-gray-500 hover:text-blue-600 font-medium flex items-center gap-1"
+                              >
+                                <FileText size={12} /> PDF
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await copyPublicRouteSheetUrl(t.id)
+                                    alert('Link público copiado. Pegalo en WhatsApp para mandárselo al chofer.')
+                                  } catch {
+                                    alert('No se pudo copiar el link.')
+                                  }
+                                }}
+                                title="Copiar link público para compartir"
+                                className="text-xs text-gray-500 hover:text-blue-600 font-medium flex items-center gap-1"
+                              >
+                                <LinkIcon size={12} /> Link
+                              </button>
+                            </>
                           )}
                           {t.status !== 'cancelado' && canEditar && (
                             <button onClick={() => startEdit(t)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button>
