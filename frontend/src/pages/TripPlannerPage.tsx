@@ -878,6 +878,11 @@ function DraftTripCard({
   }, [trip.origin, hasOrigin])
   const [originDropOver, setOriginDropOver] = useState(false)
 
+  const totalServiceSec = useMemo(
+    () => stops.reduce((acc, s) => acc + (s.service_minutes ?? 15) * 60, 0),
+    [stops],
+  )
+
   // Tiempos por parada (acumulados desde el inicio):
   // segments[i] es el tramo del coord[i] al coord[i+1]. coord[0] es origen si está, sino la primera parada.
   const stopArrivalMin = useMemo<(number | null)[]>(() => {
@@ -1009,10 +1014,16 @@ function DraftTripCard({
 
           {/* Resumen ruta */}
           {route && (
-            <div className="flex gap-2 text-xs text-gray-500">
-              <span>{formatKm(route.distance_m)}</span>
-              <span>·</span>
-              <span>{formatDuration(route.duration_s)} total</span>
+            <div className="text-xs text-gray-500 space-y-0.5">
+              <div className="flex gap-2">
+                <span className="font-medium text-gray-700">{formatKm(route.distance_m)}</span>
+                <span>·</span>
+                <span className="font-medium text-gray-700">{formatMinShort(((route.duration_s ?? 0) + totalServiceSec) / 60)} total</span>
+              </div>
+              <div className="text-[10px] text-gray-400">
+                {formatMinShort((route.duration_s ?? 0) / 60)} en ruta + {formatMinShort(totalServiceSec / 60)} en paradas
+                <span className="ml-1 italic">(sin tráfico)</span>
+              </div>
             </div>
           )}
 
