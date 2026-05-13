@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Trash2, GripVertical, Save, Loader2, AlertTriangle, MapPin, Clock } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
 import AddressAutocomplete from '@/components/AddressAutocomplete'
+import type { LeafletMap, LeafletLayer } from '@/lib/leaflet'
 import type { Driver, Trip, Vehicle } from '@/types'
 
 interface PlannedStop {
@@ -20,23 +21,6 @@ interface RouteSummary {
   distance_m: number | null
   duration_s: number | null
 }
-
-interface LeafletMapHandle {
-  setView: (c: [number, number], z: number) => void
-  fitBounds: (b: unknown, opts?: { padding?: [number, number] }) => void
-  remove: () => void
-  invalidateSize: () => void
-}
-interface LeafletLayerHandle { addTo: (m: LeafletMapHandle) => LeafletLayerHandle; remove: () => void }
-interface LeafletStatic {
-  map: (el: HTMLElement, opts?: object) => LeafletMapHandle
-  tileLayer: (url: string, opts?: object) => LeafletLayerHandle
-  marker: (latlng: [number, number], opts?: object) => LeafletLayerHandle
-  polyline: (points: [number, number][], opts?: object) => LeafletLayerHandle
-  divIcon: (opts: object) => unknown
-  latLngBounds: (points: [number, number][]) => unknown
-}
-declare global { interface Window { L?: LeafletStatic } }
 
 function emptyStop(): PlannedStop {
   return { alias: '', address: '', lat: null, lng: null, service_minutes: 15 }
@@ -117,8 +101,8 @@ export default function TripPlannerPage() {
 
   // Mapa Leaflet
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
-  const mapRef = useRef<LeafletMapHandle | null>(null)
-  const layersRef = useRef<LeafletLayerHandle[]>([])
+  const mapRef = useRef<LeafletMap | null>(null)
+  const layersRef = useRef<LeafletLayer[]>([])
 
   useEffect(() => {
     const L = window.L

@@ -1,28 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Loader2, AlertTriangle } from 'lucide-react'
 import { api } from '@/lib/api'
+import type { LeafletMap, LeafletLayer } from '@/lib/leaflet'
 import type { TripStop } from '@/types'
-
-// Leaflet se carga desde CDN en index.html y expone `L` como global.
-// Definimos un tipado minimo para no depender del paquete @types/leaflet.
-interface LeafletMap {
-  setView: (center: [number, number], zoom: number) => LeafletMap
-  fitBounds: (bounds: unknown, options?: { padding?: [number, number] }) => LeafletMap
-  remove: () => void
-  invalidateSize: () => void
-}
-interface LeafletLayer { addTo: (m: LeafletMap) => LeafletLayer; remove: () => void }
-interface LeafletStatic {
-  map: (el: HTMLElement, opts?: object) => LeafletMap
-  tileLayer: (url: string, opts?: object) => LeafletLayer
-  marker: (latlng: [number, number], opts?: object) => LeafletLayer
-  polyline: (points: [number, number][], opts?: object) => LeafletLayer
-  divIcon: (opts: object) => unknown
-  latLngBounds: (points: [number, number][]) => unknown
-}
-declare global {
-  interface Window { L?: LeafletStatic }
-}
 
 interface Props {
   tripId: string
