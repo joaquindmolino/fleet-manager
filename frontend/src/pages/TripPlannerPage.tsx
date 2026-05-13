@@ -260,27 +260,43 @@ export default function TripPlannerPage() {
     layersRef.current = []
 
     const Lx = L
-    function pinIcon(color: string, label: string) {
+    function escapeHtml(s: string): string {
+      return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
+    }
+    function pinIcon(color: string, label: string, alias: string | null) {
+      const aliasHtml = alias
+        ? `<div style="position:absolute;left:32px;top:6px;white-space:nowrap;background:white;
+            border:1px solid ${color};border-radius:6px;padding:2px 6px;font:600 11px/1.2 system-ui,sans-serif;
+            color:#111;box-shadow:0 1px 2px rgba(0,0,0,.15);pointer-events:none;">${escapeHtml(alias)}</div>`
+        : ''
       return Lx.divIcon({
         className: '',
         iconSize: [28, 36],
         iconAnchor: [14, 36],
-        html: `<svg width="28" height="36" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg">
-          <path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z"
-            fill="${color}" stroke="white" stroke-width="2"/>
-          <text x="14" y="18" font-family="Arial, sans-serif" font-size="10" font-weight="bold"
-            fill="white" text-anchor="middle">${label}</text>
-        </svg>`,
+        html: `<div style="position:relative;">
+          <svg width="28" height="36" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg" style="display:block;">
+            <path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z"
+              fill="${color}" stroke="white" stroke-width="2"/>
+            <text x="14" y="18" font-family="Arial, sans-serif" font-size="10" font-weight="bold"
+              fill="white" text-anchor="middle">${label}</text>
+          </svg>${aliasHtml}</div>`,
       })
     }
 
-    // Pool: pins grises o color del pin con etiqueta vacía
+    function shortLabel(alias: string | null, address: string): string {
+      const a = (alias ?? '').trim()
+      if (a) return a
+      const first = (address || '').split(',')[0].trim()
+      return first.length > 28 ? first.slice(0, 28) + '…' : first
+    }
+
+    // Pool: pins con color de categoría + alias visible
     pool.forEach(p => {
-      const icon = pinIcon(pinHex(p.pin_color), '')
+      const icon = pinIcon(pinHex(p.pin_color), '', shortLabel(p.alias, p.address))
       layersRef.current.push(L.marker([p.lat, p.lng], { icon }).addTo(map))
     })
 
-    // Cada viaje: pins con número y línea con su line_color
+    // Cada viaje: pins con número, alias visible, y línea con su line_color
     drafts.forEach(t => {
       const stops = stopsByTrip[t.id] ?? []
       const lineColor = t.line_color ?? '#3b82f6'
@@ -293,7 +309,7 @@ export default function TripPlannerPage() {
         }).addTo(map))
       }
       stops.forEach((s, i) => {
-        const icon = pinIcon(pinHex(s.pin_color), String(i + 1))
+        const icon = pinIcon(pinHex(s.pin_color), String(i + 1), shortLabel(s.alias, s.address))
         layersRef.current.push(L.marker([s.lat, s.lng], { icon }).addTo(map))
       })
     })
