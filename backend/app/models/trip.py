@@ -34,6 +34,9 @@ class Trip(Base, TimestampMixin):
     driver_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("drivers.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Nombre custom del viaje (lo que ve el coordinador en el despachador).
+    # Si está vacío se muestra "Viaje del DD/MM" por defecto.
+    name: Mapped[str | None] = mapped_column(String(150), nullable=True)
     origin: Mapped[str] = mapped_column(String(300), nullable=False)
     destination: Mapped[str] = mapped_column(String(300), nullable=False)
     start_odometer: Mapped[int | None] = mapped_column(Integer)

@@ -610,7 +610,7 @@ export default function TripPlannerPage() {
                           className="w-full flex items-center gap-2 border border-gray-200 hover:bg-white rounded-lg px-2 py-1.5 text-xs"
                         >
                           <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.line_color ?? '#6b7280' }} />
-                          <span className="truncate text-gray-700">{t.associated_document ?? `Viaje del ${new Date(t.created_at).toLocaleDateString('es-AR')}`}</span>
+                          <span className="truncate text-gray-700">{t.name ?? `Viaje del ${new Date(t.created_at).toLocaleDateString('es-AR')}`}</span>
                         </button>
                       ))}
                     </div>
@@ -797,12 +797,14 @@ function DraftTripCard({
 }) {
   const driver = drivers.find(d => d.id === trip.driver_id)
   const [dragStopId, setDragStopId] = useState<string | null>(null)
+  const dragStopIdRef = useRef<string | null>(null)
   const [dropTarget, setDropTarget] = useState<{ id: string; pos: 'before' | 'after' } | null>(null)
   const [moveMenuStopId, setMoveMenuStopId] = useState<string | null>(null)
 
   function handleStopDrop() {
-    const drag = dragStopId
+    const drag = dragStopIdRef.current
     const target = dropTarget
+    dragStopIdRef.current = null
     setDragStopId(null)
     setDropTarget(null)
     if (!drag || !target || drag === target.id) return
@@ -824,7 +826,7 @@ function DraftTripCard({
         <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: trip.line_color ?? '#6b7280' }} />
         <div className="flex-1 min-w-0 text-left">
           <p className="text-sm font-medium text-gray-800 truncate">
-            {trip.associated_document ?? `Viaje ${new Date(trip.created_at).toLocaleDateString('es-AR')}`}
+            {trip.name ?? `Viaje del ${new Date(trip.created_at).toLocaleDateString('es-AR')}`}
           </p>
           <p className="text-xs text-gray-400 truncate">
             {stops.length} parada{stops.length !== 1 ? 's' : ''}
@@ -839,10 +841,22 @@ function DraftTripCard({
           <div className="space-y-2 pt-2">
             <input
               type="text"
-              placeholder="Identificador (remito, ruta...)"
-              defaultValue={trip.associated_document ?? ''}
+              placeholder="Nombre del viaje (ej. Reparto Norte)"
+              defaultValue={trip.name ?? ''}
+              key={`name-${trip.id}-${trip.name ?? ''}`}
               onBlur={e => {
-                const v = e.target.value
+                const v = e.target.value.trim()
+                if (v !== (trip.name ?? '')) onUpdate({ name: v || null })
+              }}
+              className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs font-medium"
+            />
+            <input
+              type="text"
+              placeholder="Documento asociado (remito, OC...)"
+              defaultValue={trip.associated_document ?? ''}
+              key={`doc-${trip.id}-${trip.associated_document ?? ''}`}
+              onBlur={e => {
+                const v = e.target.value.trim()
                 if (v !== (trip.associated_document ?? '')) onUpdate({ associated_document: v || null })
               }}
               className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs"
@@ -850,7 +864,13 @@ function DraftTripCard({
             <div className="grid grid-cols-2 gap-2">
               <select
                 value={trip.driver_id ?? ''}
-                onChange={e => onUpdate({ driver_id: e.target.value || null })}
+                onChange={e => {
+                  const driverId = e.target.value || null
+                  const picked = drivers.find(d => d.id === driverId)
+                  const patch: Partial<Trip> = { driver_id: driverId }
+                  if (picked?.vehicle_id) patch.vehicle_id = picked.vehicle_id
+                  onUpdate(patch)
+                }}
                 className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white"
               >
                 <option value="">Sin chofer</option>
@@ -892,13 +912,17 @@ function DraftTripCard({
                     <div
                       draggable
                       onDragStart={(e) => {
+                        dragStopIdRef.current = s.id
                         setDragStopId(s.id)
                         e.dataTransfer.effectAllowed = 'move'
+                        e.dataTransfer.setData('text/plain', s.id)
                       }}
-                      onDragEnd={() => { setDragStopId(null); setDropTarget(null) }}
+                      onDragEnd={() => { dragStopIdRef.current = null; setDragStopId(null); setDropTarget(null) }}
                       onDragOver={(e) => {
-                        if (!dragStopId || dragStopId === s.id) return
+                        const drag = dragStopIdRef.current
+                        if (!drag || drag === s.id) return
                         e.preventDefault()
+                        e.dataTransfer.dropEffect = 'move'
                         const rect = e.currentTarget.getBoundingClientRect()
                         const pos: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
                         setDropTarget(prev => (prev?.id === s.id && prev.pos === pos) ? prev : { id: s.id, pos })
@@ -924,7 +948,7 @@ function DraftTripCard({
                           <button
                             onClick={() => setMoveMenuStopId(moveMenuStopId === s.id ? null : s.id)}
                             title="Mover a otro viaje"
-                            className="text-gray-300 hover:text-blue-500 p-0.5"
+                            className="text-gray-600 hover:text-blue-600 p-0.5"
                           >
                             <MoreVertical size={12} />
                           </button>
@@ -938,7 +962,7 @@ function DraftTripCard({
                                   className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 text-left"
                                 >
                                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.line_color ?? '#6b7280' }} />
-                                  <span className="truncate">{t.associated_document ?? `Viaje del ${new Date(t.created_at).toLocaleDateString('es-AR')}`}</span>
+                                  <span className="truncate">{t.name ?? `Viaje del ${new Date(t.created_at).toLocaleDateString('es-AR')}`}</span>
                                 </button>
                               ))}
                             </div>
@@ -946,7 +970,7 @@ function DraftTripCard({
                         </div>
                       )}
                       <button onClick={() => onReturnStop(s.id)} title="Devolver al pool"
-                        className="text-gray-300 hover:text-blue-500 shrink-0">
+                        className="text-gray-600 hover:text-blue-600 shrink-0">
                         <RotateCcw size={12} />
                       </button>
                     </div>

@@ -8,6 +8,7 @@ from app.models.trip import EstadoViaje
 
 
 class TripBase(BaseModel):
+    name: str | None = None
     origin: str = ""
     destination: str = ""
     start_odometer: int | None = None
@@ -38,6 +39,7 @@ class QuickTripCreate(BaseModel):
 
 
 class TripUpdate(BaseModel):
+    name: str | None = None
     origin: str | None = None
     destination: str | None = None
     associated_document: str | None = None

@@ -165,6 +165,7 @@ export interface Trip {
   vehicle_id: string
   driver_id: string | null
   client_id: string | null
+  name: string | null
   origin: string
   destination: string
   start_odometer: number | null

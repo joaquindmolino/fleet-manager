@@ -277,7 +277,7 @@ export default function TripsPage() {
                     <tr key={t.id} className={row}>
                       <td className="px-3 py-3 font-medium text-gray-900">
                         <Link to={tripLink(t)} className="hover:text-blue-600 transition-colors">
-                          {t.associated_document ?? <span className="text-gray-400 font-normal text-xs">Sin documento</span>}
+                          {t.name ?? t.associated_document ?? <span className="text-gray-400 font-normal text-xs">Sin nombre</span>}
                         </Link>
                       </td>
                       <td className="px-3 py-3 text-gray-500 text-xs">{clientName}</td>
@@ -363,7 +363,7 @@ export default function TripsPage() {
                   {/* Tappable left area */}
                   <Link to={tripLink(t)} className="flex-1 min-w-0 px-4 py-3.5 space-y-0.5">
                     <p className="font-semibold text-gray-900 truncate">
-                      {t.associated_document ?? t.destination}
+                      {t.name ?? t.associated_document ?? t.destination}
                     </p>
                     <p className="text-xs text-gray-500">
                       {v ? <span className="font-mono">{v.plate}</span> : null}
