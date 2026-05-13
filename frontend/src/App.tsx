@@ -17,6 +17,7 @@ import SatellitePage from '@/pages/SatellitePage'
 import GpsConfigPage from '@/pages/GpsConfigPage'
 import ConfigPage from '@/pages/ConfigPage'
 import TripDetailPage from '@/pages/TripDetailPage'
+import TripPlannerPage from '@/pages/TripPlannerPage'
 import AdminPage from '@/pages/AdminPage'
 import NotificationsPage from '@/pages/NotificationsPage'
 
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="maintenance" element={<RequirePermission module="mantenimiento" action="ver"><MaintenancePage /></RequirePermission>} />
           <Route path="delivery" element={<DeliveryModePage />} />
           <Route path="trips" element={<RequirePermission module="viajes" action="ver"><TripsPage /></RequirePermission>} />
+          <Route path="trips/plan" element={<RequirePermission module="viajes" action="crear"><TripPlannerPage /></RequirePermission>} />
           <Route path="trips/:id" element={<RequirePermission module="viajes" action="ver"><TripDetailPage /></RequirePermission>} />
           <Route path="suppliers" element={<RequirePermission module="proveedores" action="ver"><SuppliersPage /></RequirePermission>} />
           <Route path="clients" element={<RequirePermission module="clientes" action="ver"><ClientsPage /></RequirePermission>} />

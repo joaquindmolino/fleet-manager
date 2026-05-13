@@ -12,13 +12,14 @@ from app.api.dependencies import CurrentUser, DbSession, make_permission_checker
 from app.core.config import settings
 from app.models.coordinator import CoordinatorAssignment
 from app.models.driver import Driver
-from app.models.trip import Trip, TripStop
+from app.models.trip import Trip, TripStop, TripPlannedStop
 from app.models.vehicle import Vehicle
 from app.models.tire import Tire
 from app.schemas.common import PaginatedResponse
 from app.schemas.trip import (
     TripCreate, TripResponse, TripUpdate, QuickTripCreate,
     TripStopCreate, TripStopResponse, TripStopUpdate, TripStartBody, TripCompleteBody,
+    TripPlannedStopInput, TripPlannedStopResponse,
 )
 from app.models.trip import EstadoViaje
 from app.tasks.notifications import _async_notify_trip_assigned, _async_notify_trip_started, _async_notify_trip_completed
@@ -195,9 +196,28 @@ async def list_trips(
 
 @router.post("", response_model=TripResponse, status_code=status.HTTP_201_CREATED, dependencies=[_can_crear])
 async def create_trip(body: TripCreate, current_user: CurrentUser, db: DbSession, bg: BackgroundTasks) -> Trip:
-    trip = Trip(tenant_id=current_user.tenant_id, **body.model_dump())
+    data = body.model_dump(exclude={"planned_stops"})
+    trip = Trip(tenant_id=current_user.tenant_id, **data)
     db.add(trip)
     await db.flush()
+
+    if body.planned_stops:
+        for i, ps in enumerate(body.planned_stops):
+            db.add(TripPlannedStop(
+                tenant_id=current_user.tenant_id,
+                trip_id=trip.id,
+                sequence=i,
+                alias=ps.alias,
+                address=ps.address,
+                lat=ps.lat,
+                lng=ps.lng,
+                service_minutes=ps.service_minutes,
+            ))
+        # Si stops_count no fue seteado explícitamente, lo derivamos de la cantidad planificada
+        if trip.stops_count is None:
+            trip.stops_count = len(body.planned_stops)
+        await db.flush()
+
     await db.refresh(trip)
     if trip.driver_id:
         bg.add_task(_async_notify_trip_assigned, str(trip.id))
@@ -490,3 +510,59 @@ async def update_trip_stop(
     await db.flush()
     await db.refresh(stop)
     return stop
+
+
+@router.get("/{trip_id}/planned-stops", response_model=list[TripPlannedStopResponse], dependencies=[_can_ver])
+async def list_planned_stops(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> list[TripPlannedStop]:
+    """Lista las paradas planificadas de un viaje en orden."""
+    trip = (await db.execute(
+        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+    result = await db.execute(
+        select(TripPlannedStop)
+        .where(TripPlannedStop.trip_id == trip_id)
+        .order_by(TripPlannedStop.sequence)
+    )
+    return list(result.scalars().all())
+
+
+@router.put("/{trip_id}/planned-stops", response_model=list[TripPlannedStopResponse], dependencies=[_can_editar])
+async def replace_planned_stops(
+    trip_id: uuid.UUID,
+    body: list[TripPlannedStopInput],
+    current_user: CurrentUser,
+    db: DbSession,
+) -> list[TripPlannedStop]:
+    """Reemplaza atomicamente todas las paradas planificadas del viaje (ideal para drag-and-drop)."""
+    trip = (await db.execute(
+        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+
+    # Borrar las anteriores
+    from sqlalchemy import delete
+    await db.execute(delete(TripPlannedStop).where(TripPlannedStop.trip_id == trip_id))
+
+    # Insertar las nuevas con sequence según el orden recibido
+    for i, ps in enumerate(body):
+        db.add(TripPlannedStop(
+            tenant_id=current_user.tenant_id,
+            trip_id=trip_id,
+            sequence=i,
+            alias=ps.alias,
+            address=ps.address,
+            lat=ps.lat,
+            lng=ps.lng,
+            service_minutes=ps.service_minutes,
+        ))
+
+    await db.flush()
+    result = await db.execute(
+        select(TripPlannedStop)
+        .where(TripPlannedStop.trip_id == trip_id)
+        .order_by(TripPlannedStop.sequence)
+    )
+    return list(result.scalars().all())

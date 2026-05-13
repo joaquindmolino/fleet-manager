@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
-import { Plus, Route, Play, Loader2, ChevronRight, Navigation } from 'lucide-react'
+import { Plus, Route, Play, Loader2, ChevronRight, Navigation, Map as MapIcon } from 'lucide-react'
 import { api } from '@/lib/api'
 import { captureLocation } from '@/lib/geolocation'
 import { useList } from '@/hooks/useList'
@@ -169,7 +169,14 @@ export default function TripsPage() {
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div><h1 className="text-2xl font-bold text-gray-900">Viajes</h1><p className="text-sm text-gray-500 mt-0.5">{data?.total ?? '—'} viajes registrados</p></div>
-        <button onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }} className="hidden md:flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"><Plus size={16} /> Registrar viaje</button>
+        <div className="hidden md:flex items-center gap-2">
+          <Link to="/trips/plan" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+            <MapIcon size={16} /> Planificar viaje
+          </Link>
+          <button onClick={() => { setAddingRow(true); setEditingId(null); setAddForm(EMPTY) }} className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+            <Plus size={16} /> Registrar
+          </button>
+        </div>
       </div>
 
       {/* Desktop table */}

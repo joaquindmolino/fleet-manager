@@ -56,6 +56,9 @@ class Trip(Base, TimestampMixin):
     driver: Mapped["Driver | None"] = relationship(back_populates="trips")  # noqa: F821
     client: Mapped["Client | None"] = relationship(back_populates="trips")  # noqa: F821
     stops: Mapped[list["TripStop"]] = relationship(back_populates="trip", order_by="TripStop.timestamp")
+    planned_stops: Mapped[list["TripPlannedStop"]] = relationship(
+        back_populates="trip", order_by="TripPlannedStop.sequence", cascade="all, delete-orphan"
+    )
 
 
 class TripStop(Base, TimestampMixin):
@@ -78,3 +81,30 @@ class TripStop(Base, TimestampMixin):
     is_extra: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     trip: Mapped["Trip"] = relationship(back_populates="stops")
+
+
+class TripPlannedStop(Base, TimestampMixin):
+    """Parada planificada por el coordinador antes de iniciar el viaje.
+
+    Se mantiene separada de TripStop (que registra entregas reales con GPS del
+    chofer). Una planificada puede o no llegar a ser una entrega real; el chofer
+    en el campo puede cumplirlas todas, saltearlas o agregar paradas extra.
+    """
+
+    __tablename__ = "trip_planned_stops"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    trip_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    alias: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    address: Mapped[str] = mapped_column(String(500), nullable=False)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lng: Mapped[float] = mapped_column(Float, nullable=False)
+    service_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
+
+    trip: Mapped["Trip"] = relationship(back_populates="planned_stops")

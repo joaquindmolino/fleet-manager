@@ -22,6 +22,7 @@ class TripCreate(TripBase):
     vehicle_id: uuid.UUID
     driver_id: uuid.UUID | None = None
     start_time: datetime | None = None
+    planned_stops: list["TripPlannedStopInput"] | None = None
 
 
 class QuickTripCreate(BaseModel):
@@ -89,6 +90,27 @@ class TripStopCreate(BaseModel):
 
 class TripStopUpdate(BaseModel):
     notes: str | None = Field(None, max_length=300)
+
+
+class TripPlannedStopBase(BaseModel):
+    alias: str | None = Field(None, max_length=100)
+    address: str = Field(..., min_length=1, max_length=500)
+    lat: float
+    lng: float
+    service_minutes: int = Field(15, ge=0, le=480)
+
+
+class TripPlannedStopInput(TripPlannedStopBase):
+    """Input al crear o reemplazar paradas planificadas (sin sequence, lo asigna el server)."""
+    pass
+
+
+class TripPlannedStopResponse(TripPlannedStopBase):
+    id: uuid.UUID
+    trip_id: uuid.UUID
+    sequence: int
+
+    model_config = {"from_attributes": True}
 
 
 class TripStopResponse(BaseModel):

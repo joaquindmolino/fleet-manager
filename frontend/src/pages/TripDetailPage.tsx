@@ -310,9 +310,6 @@ export default function TripDetailPage() {
               <div className="bg-gray-50 rounded-lg px-3 py-2.5">
                 <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Distancia</p>
                 <p className="text-base font-semibold text-gray-900 mt-0.5">{formatKm(routeSummary?.distance_m ?? null)}</p>
-                {routeSummary?.duration_s != null && (
-                  <p className="text-xs text-gray-400 mt-0.5">{formatDuration(routeSummary.duration_s)} manejando</p>
-                )}
               </div>
               <div className="bg-gray-50 rounded-lg px-3 py-2.5">
                 <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Entregas</p>
