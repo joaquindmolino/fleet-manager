@@ -114,11 +114,20 @@ async def route(body: RouteRequest, current_user: CurrentUser) -> dict:
         data = response.json()
         feature = data["features"][0]
         coords = feature["geometry"]["coordinates"]
-        summary = feature.get("properties", {}).get("summary", {}) or {}
+        props = feature.get("properties", {})
+        summary = props.get("summary", {}) or {}
+        segments = props.get("segments", []) or []
         return {
             "geometry": [[c[1], c[0]] for c in coords],
             "distance_m": summary.get("distance"),
             "duration_s": summary.get("duration"),
+            "segments": [
+                {
+                    "distance_m": s.get("distance"),
+                    "duration_s": s.get("duration"),
+                }
+                for s in segments
+            ],
         }
     except httpx.HTTPError as exc:
         raise HTTPException(

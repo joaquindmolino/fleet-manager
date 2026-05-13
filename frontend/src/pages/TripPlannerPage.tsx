@@ -16,10 +16,16 @@ interface PlannedStop {
   service_minutes: number
 }
 
+interface RouteSegment {
+  distance_m: number | null
+  duration_s: number | null
+}
+
 interface RouteSummary {
   geometry: [number, number][]
   distance_m: number | null
   duration_s: number | null
+  segments?: RouteSegment[]
 }
 
 function emptyStop(): PlannedStop {
@@ -170,6 +176,39 @@ export default function TripPlannerPage() {
     return routeSummary.duration_s + serviceS
   }, [routeSummary, geocodedStops])
 
+  // ETA acumulado al ARRIBO de cada parada geocodificada (desde t=0 del viaje).
+  // eta[0] = 0 (inicio); eta[i] = eta[i-1] + service(i-1) + segment(i-1->i)
+  const cumulativeEtas = useMemo<(number | null)[]>(() => {
+    if (geocodedStops.length === 0) return []
+    const segments = routeSummary?.segments
+    if (!segments || segments.length < geocodedStops.length - 1) {
+      return geocodedStops.map((_, i) => i === 0 ? 0 : null)
+    }
+    const etas: number[] = [0]
+    for (let i = 1; i < geocodedStops.length; i++) {
+      const prevService = geocodedStops[i - 1].service_minutes * 60
+      const legDuration = segments[i - 1]?.duration_s ?? 0
+      etas.push(etas[i - 1] + prevService + legDuration)
+    }
+    return etas
+  }, [geocodedStops, routeSummary])
+
+  // Para mostrar el ETA al lado de cada fila del LISTADO completo (incluye filas
+  // todavía sin dirección), mapeamos índice del listado → índice del geocoded.
+  const etaByStopIdx = useMemo(() => {
+    const result: (number | null)[] = []
+    let gIdx = 0
+    for (const s of stops) {
+      if (s.lat != null && s.lng != null) {
+        result.push(cumulativeEtas[gIdx] ?? null)
+        gIdx++
+      } else {
+        result.push(null)
+      }
+    }
+    return result
+  }, [stops, cumulativeEtas])
+
   function updateStop(i: number, patch: Partial<PlannedStop>) {
     setStops(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s))
   }
@@ -284,7 +323,10 @@ export default function TripPlannerPage() {
               <span className="text-xs text-gray-400">{geocodedStops.length} de {stops.length} con dirección</span>
             </div>
             <div className="space-y-1.5">
-              {stops.map((s, i) => (
+              {stops.map((s, i) => {
+                const eta = etaByStopIdx[i]
+                const etaLabel = eta == null ? null : i === 0 ? 'Inicio' : `+${formatDuration(eta)}`
+                return (
                 <div
                   key={i}
                   draggable
@@ -296,8 +338,13 @@ export default function TripPlannerPage() {
                   <button type="button" className="cursor-grab text-gray-300 hover:text-gray-600 shrink-0">
                     <GripVertical size={14} />
                   </button>
-                  <div className="w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                    {i + 1}
+                  <div className="shrink-0 flex flex-col items-center">
+                    <div className="w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center">
+                      {i + 1}
+                    </div>
+                    {etaLabel && (
+                      <span className="text-[9px] text-gray-500 mt-0.5 whitespace-nowrap">{etaLabel}</span>
+                    )}
                   </div>
                   <input
                     type="text"
@@ -332,7 +379,7 @@ export default function TripPlannerPage() {
                     <Trash2 size={13} />
                   </button>
                 </div>
-              ))}
+              )})}
               <button type="button" onClick={addStop}
                 className="w-full border-2 border-dashed border-gray-200 rounded-lg py-2 text-xs text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors flex items-center justify-center gap-1.5">
                 <Plus size={13} /> Agregar parada
