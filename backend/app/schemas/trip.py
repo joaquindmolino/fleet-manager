@@ -47,6 +47,8 @@ class TripUpdate(BaseModel):
     start_odometer: int | None = None
     client_id: uuid.UUID | None = None
     scheduled_date: datetime | None = None
+    start_lat: float | None = None
+    start_lng: float | None = None
     end_odometer: int | None = None
     end_time: datetime | None = None
     status: EstadoViaje | None = None

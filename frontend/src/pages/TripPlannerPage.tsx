@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Plus, Trash2, ChevronDown, ChevronRight, Loader2,
-  CheckCircle, RotateCcw, Search, X, GripVertical, MoreVertical,
+  CheckCircle, RotateCcw, Search, X, GripVertical, MoreVertical, Flag,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
@@ -65,10 +65,16 @@ interface DraftTrip extends Trip {
   // planned_stops se carga aparte por endpoint
 }
 
+interface RouteSegment {
+  distance_m: number | null
+  duration_s: number | null
+}
+
 interface RouteGeometry {
   geometry: [number, number][]
   distance_m: number | null
   duration_s: number | null
+  segments?: RouteSegment[]
 }
 
 function formatKm(m: number | null | undefined): string {
@@ -83,6 +89,13 @@ function formatDuration(s: number | null | undefined): string {
   if (h === 0) return `${min} min`
   if (min === 0) return `${h} h`
   return `${h} h ${min} min`
+}
+
+function formatMinShort(min: number): string {
+  if (min < 60) return `${Math.round(min)} min`
+  const h = Math.floor(min / 60)
+  const m = Math.round(min - h * 60)
+  return m === 0 ? `${h}h` : `${h}h ${m}m`
 }
 
 function escapeHtml(s: string): string {
@@ -183,20 +196,22 @@ export default function TripPlannerPage() {
 
   // Geometría OSRM por viaje (cargadas on-demand)
   const [tripRoutes, setTripRoutes] = useState<Record<string, RouteGeometry>>({})
+  // Firma actual de cada ruta para detectar cambios (origen + paradas).
+  const routeSigRef = useRef<Record<string, string>>({})
   useEffect(() => {
     drafts.forEach(t => {
-      const stops = stopsByTrip[t.id]
-      if (!stops || stops.length < 2) return
-      const key = stops.map(s => `${s.lat.toFixed(6)},${s.lng.toFixed(6)}`).join('|')
-      if (tripRoutes[t.id] && tripRoutes[t.id].geometry.length > 0 &&
-          // Misma cantidad de puntos = asumimos misma ruta (no perfecto pero suficiente)
-          tripRoutes[t.id].geometry.length >= stops.length) {
-        return
-      }
-      api.post<RouteGeometry>('/routing/route', { coordinates: stops.map(s => [s.lng, s.lat]) })
+      const stops = stopsByTrip[t.id] ?? []
+      const hasOrigin = t.start_lat != null && t.start_lng != null
+      const coords: [number, number][] = []
+      if (hasOrigin) coords.push([t.start_lng!, t.start_lat!])
+      coords.push(...stops.map(s => [s.lng, s.lat] as [number, number]))
+      if (coords.length < 2) return
+      const sig = coords.map(c => `${c[0].toFixed(6)},${c[1].toFixed(6)}`).join('|')
+      if (routeSigRef.current[t.id] === sig) return
+      routeSigRef.current[t.id] = sig
+      api.post<RouteGeometry>('/routing/route', { coordinates: coords })
         .then(r => setTripRoutes(prev => ({ ...prev, [t.id]: r.data })))
         .catch(() => { /* silencioso, dejamos sin polyline */ })
-      void key
     })
   }, [drafts, stopsByTrip])
 
@@ -368,12 +383,23 @@ export default function TripPlannerPage() {
       const stops = stopsByTrip[t.id] ?? []
       const lineColor = t.line_color ?? '#3b82f6'
       const route = tripRoutes[t.id]
-      const polyPoints = route?.geometry ?? stops.map(s => [s.lat, s.lng] as [number, number])
+      const hasOrigin = t.start_lat != null && t.start_lng != null
+      const fallbackPoly: [number, number][] = []
+      if (hasOrigin) fallbackPoly.push([t.start_lat!, t.start_lng!])
+      fallbackPoly.push(...stops.map(s => [s.lat, s.lng] as [number, number]))
+      const polyPoints = route?.geometry ?? fallbackPoly
       if (polyPoints.length >= 2) {
         layersRef.current.push(L.polyline(polyPoints, {
           color: lineColor, weight: 4, opacity: 0.8,
           dashArray: route ? undefined : '6 6',
         }).addTo(map))
+      }
+      // Pin de inicio (verde con S)
+      if (hasOrigin) {
+        const startIcon = buildPinIcon(L, '#16a34a', 'S', `Inicio: ${shortLabel(null, t.origin)}`, false)
+        const marker = L.marker([t.start_lat!, t.start_lng!], { icon: startIcon })
+        marker.addTo(map)
+        layersRef.current.push(marker)
       }
       stops.forEach((s, i) => {
         const icon = buildPinIcon(L, pinHex(s.pin_color), String(i + 1), shortLabel(s.alias, s.address), false)
@@ -389,7 +415,11 @@ export default function TripPlannerPage() {
     // Fit bounds solo si el conjunto de puntos realmente cambió.
     const allPoints: [number, number][] = [
       ...pool.map(p => [p.lat, p.lng] as [number, number]),
-      ...drafts.flatMap(t => (stopsByTrip[t.id] ?? []).map(s => [s.lat, s.lng] as [number, number])),
+      ...drafts.flatMap(t => {
+        const sp = (stopsByTrip[t.id] ?? []).map(s => [s.lat, s.lng] as [number, number])
+        if (t.start_lat != null && t.start_lng != null) sp.unshift([t.start_lat, t.start_lng])
+        return sp
+      }),
     ]
     const sig = allPoints.map(p => `${p[0].toFixed(5)},${p[1].toFixed(5)}`).join('|')
     if (sig !== lastFitSigRef.current && allPoints.length > 0) {
@@ -819,37 +849,62 @@ function DraftTripCard({
     onReorder(ids)
   }
 
+  const defaultName = `Viaje del ${new Date(trip.created_at).toLocaleDateString('es-AR')}`
+  const hasOrigin = trip.start_lat != null && trip.start_lng != null
+
+  // Tiempos por parada (acumulados desde el inicio):
+  // segments[i] es el tramo del coord[i] al coord[i+1]. coord[0] es origen si está, sino la primera parada.
+  const stopArrivalMin = useMemo<(number | null)[]>(() => {
+    if (!route?.segments?.length) return stops.map(() => null)
+    const segs = route.segments
+    const result: (number | null)[] = []
+    let acc = 0
+    for (let i = 0; i < stops.length; i++) {
+      const segIdx = hasOrigin ? i : (i - 1)
+      if (segIdx >= 0 && segs[segIdx]?.duration_s != null) {
+        acc += segs[segIdx]!.duration_s!
+        result.push(acc / 60)
+      } else if (segIdx < 0) {
+        result.push(0)
+      } else {
+        result.push(null)
+      }
+      // Sumar tiempo de servicio para los próximos cálculos
+      acc += (stops[i].service_minutes ?? 15) * 60
+    }
+    return result
+  }, [route, stops, hasOrigin])
+
   return (
     <div>
-      <button onClick={onToggle} className="w-full px-3 py-2.5 flex items-center gap-2 hover:bg-gray-50">
-        {expanded ? <ChevronDown size={14} className="text-gray-400" /> : <ChevronRight size={14} className="text-gray-400" />}
-        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: trip.line_color ?? '#6b7280' }} />
-        <div className="flex-1 min-w-0 text-left">
-          <p className="text-sm font-medium text-gray-800 truncate">
-            {trip.name ?? `Viaje del ${new Date(trip.created_at).toLocaleDateString('es-AR')}`}
-          </p>
+      <div className="w-full px-3 py-2.5 flex items-center gap-2 hover:bg-gray-50">
+        <button onClick={onToggle} className="shrink-0 flex items-center gap-2">
+          {expanded ? <ChevronDown size={14} className="text-gray-400" /> : <ChevronRight size={14} className="text-gray-400" />}
+          <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: trip.line_color ?? '#6b7280' }} />
+        </button>
+        <div className="flex-1 min-w-0">
+          <input
+            type="text"
+            defaultValue={trip.name ?? ''}
+            key={`name-${trip.id}-${trip.name ?? ''}`}
+            placeholder={defaultName}
+            onBlur={e => {
+              const v = e.target.value.trim()
+              if (v !== (trip.name ?? '')) onUpdate({ name: v || null })
+            }}
+            className="w-full text-sm font-medium text-gray-800 bg-transparent border-0 outline-none focus:bg-white focus:ring-1 focus:ring-blue-300 rounded px-1 -mx-1 truncate placeholder:text-gray-500 placeholder:font-medium"
+          />
           <p className="text-xs text-gray-400 truncate">
             {stops.length} parada{stops.length !== 1 ? 's' : ''}
             {driver && ` · ${driver.full_name}`}
           </p>
         </div>
-      </button>
+      </div>
 
       {expanded && (
         <div className="px-3 pb-3 space-y-2 bg-gray-50/50">
           {/* Editar datos del viaje */}
           <div className="space-y-2 pt-2">
-            <input
-              type="text"
-              placeholder="Nombre del viaje (ej. Reparto Norte)"
-              defaultValue={trip.name ?? ''}
-              key={`name-${trip.id}-${trip.name ?? ''}`}
-              onBlur={e => {
-                const v = e.target.value.trim()
-                if (v !== (trip.name ?? '')) onUpdate({ name: v || null })
-              }}
-              className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs font-medium"
-            />
             <input
               type="text"
               placeholder="Documento asociado (remito, OC...)"
@@ -886,12 +941,26 @@ function DraftTripCard({
             </div>
           </div>
 
+          {/* Inicio del viaje */}
+          <div className="space-y-1 pt-1">
+            <label className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold flex items-center gap-1">
+              <Flag size={10} /> Inicio del viaje
+            </label>
+            <AddressAutocomplete
+              value={hasOrigin ? trip.origin : ''}
+              onChange={text => {
+                if (!text.trim()) onUpdate({ origin: 'Por definir', start_lat: null, start_lng: null })
+              }}
+              onSelect={picked => onUpdate({ origin: picked.label, start_lat: picked.lat, start_lng: picked.lng })}
+            />
+          </div>
+
           {/* Resumen ruta */}
           {route && (
             <div className="flex gap-2 text-xs text-gray-500">
               <span>{formatKm(route.distance_m)}</span>
               <span>·</span>
-              <span>{formatDuration(route.duration_s)}</span>
+              <span>{formatDuration(route.duration_s)} total</span>
             </div>
           )}
 
@@ -941,7 +1010,14 @@ function DraftTripCard({
                       </span>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-gray-800 truncate">{s.alias ?? s.address.split(',')[0]}</p>
-                        {s.notes && <p className="text-[10px] text-gray-500 italic truncate">{s.notes}</p>}
+                        <div className="flex gap-1.5 items-center">
+                          {stopArrivalMin[i] != null && (
+                            <span className="text-[10px] text-blue-600 font-medium tabular-nums">
+                              @{formatMinShort(stopArrivalMin[i]!)}
+                            </span>
+                          )}
+                          {s.notes && <p className="text-[10px] text-gray-500 italic truncate">{s.notes}</p>}
+                        </div>
                       </div>
                       {otherDrafts.length > 0 && (
                         <div className="relative shrink-0">
@@ -984,8 +1060,12 @@ function DraftTripCard({
           {/* Acciones */}
           <div className="flex gap-2 pt-1">
             <button onClick={onDelete}
-              className="flex-1 border border-red-200 text-red-600 hover:bg-red-50 text-xs rounded-lg py-1.5">
+              className="border border-red-200 text-red-600 hover:bg-red-50 text-xs rounded-lg py-1.5 px-3">
               Descartar
+            </button>
+            <button onClick={onToggle}
+              className="flex-1 border border-gray-200 text-gray-700 hover:bg-white text-xs rounded-lg py-1.5">
+              Guardar borrador
             </button>
             <button onClick={onConfirm} disabled={confirming || stops.length === 0}
               className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg py-1.5 flex items-center justify-center gap-1">
