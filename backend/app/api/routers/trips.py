@@ -579,3 +579,98 @@ async def replace_planned_stops(
         .order_by(TripPlannedStop.sequence)
     )
     return list(result.scalars().all())
+
+
+@router.post(
+    "/{trip_id}/planned-stops/reorder",
+    response_model=list[TripPlannedStopResponse],
+    dependencies=[_can_editar],
+)
+async def reorder_planned_stops(
+    trip_id: uuid.UUID,
+    stop_ids: list[uuid.UUID],
+    current_user: CurrentUser,
+    db: DbSession,
+) -> list[TripPlannedStop]:
+    """Reordena las paradas planificadas de un viaje según el orden recibido en stop_ids.
+    No recrea las paradas: solo actualiza el campo sequence preservando notes/pin_color."""
+    tid = current_user.tenant_id
+    trip = (await db.execute(
+        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == tid)
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+
+    existing = (await db.execute(
+        select(TripPlannedStop).where(
+            TripPlannedStop.trip_id == trip_id,
+            TripPlannedStop.tenant_id == tid,
+        )
+    )).scalars().all()
+    by_id = {s.id: s for s in existing}
+    if set(by_id.keys()) != set(stop_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="stop_ids debe contener exactamente las paradas actuales del viaje.",
+        )
+
+    # Asignamos una secuencia negativa primero para evitar choques con
+    # cualquier unique constraint sobre (trip_id, sequence) si existiera.
+    for s in existing:
+        s.sequence = -(s.sequence + 1)
+    await db.flush()
+    for i, sid in enumerate(stop_ids):
+        by_id[sid].sequence = i
+    await db.flush()
+    result = await db.execute(
+        select(TripPlannedStop)
+        .where(TripPlannedStop.trip_id == trip_id)
+        .order_by(TripPlannedStop.sequence)
+    )
+    return list(result.scalars().all())
+
+
+@router.post(
+    "/{trip_id}/planned-stops/{stop_id}/move-to/{target_trip_id}",
+    response_model=TripPlannedStopResponse,
+    dependencies=[_can_editar],
+)
+async def move_stop_to_other_trip(
+    trip_id: uuid.UUID,
+    stop_id: uuid.UUID,
+    target_trip_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> TripPlannedStop:
+    """Mueve una parada planificada de un viaje a otro, atomicamente.
+    Preserva alias/notes/pin_color y la agrega al final de la secuencia del viaje destino."""
+    tid = current_user.tenant_id
+    if trip_id == target_trip_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Viaje origen y destino son iguales.")
+
+    target = (await db.execute(
+        select(Trip).where(Trip.id == target_trip_id, Trip.tenant_id == tid)
+    )).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje destino no encontrado.")
+
+    stop = (await db.execute(
+        select(TripPlannedStop).where(
+            TripPlannedStop.id == stop_id,
+            TripPlannedStop.trip_id == trip_id,
+            TripPlannedStop.tenant_id == tid,
+        )
+    )).scalar_one_or_none()
+    if stop is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parada no encontrada en el viaje origen.")
+
+    current_max = (await db.execute(
+        select(func.max(TripPlannedStop.sequence)).where(TripPlannedStop.trip_id == target_trip_id)
+    )).scalar_one()
+    next_seq = (current_max + 1) if current_max is not None else 0
+
+    stop.trip_id = target_trip_id
+    stop.sequence = next_seq
+    await db.flush()
+    await db.refresh(stop)
+    return stop

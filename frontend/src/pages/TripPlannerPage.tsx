@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Plus, Trash2, ChevronDown, ChevronRight, Loader2,
-  CheckCircle, RotateCcw, Search, X,
+  CheckCircle, RotateCcw, Search, X, GripVertical, MoreVertical,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
@@ -256,6 +256,42 @@ export default function TripPlannerPage() {
       qc.invalidateQueries({ queryKey: ['pool-locations'] })
       qc.invalidateQueries({ queryKey: ['all-trip-planned-stops'] })
     },
+  })
+
+  const reorderStopsMutation = useMutation({
+    mutationFn: ({ tripId, stopIds }: { tripId: string; stopIds: string[] }) =>
+      api.post(`/trips/${tripId}/planned-stops/reorder`, stopIds).then(r => r.data),
+    onMutate: async ({ tripId, stopIds }) => {
+      await qc.cancelQueries({ queryKey: ['all-trip-planned-stops'] })
+      const prev = qc.getQueryData<Record<string, PlannedStop[]>>(
+        ['all-trip-planned-stops', drafts.map(t => t.id).sort().join(',')]
+      )
+      if (prev) {
+        const current = prev[tripId] ?? []
+        const byId = new Map(current.map(s => [s.id, s]))
+        const next = stopIds.map((id, i) => {
+          const s = byId.get(id)!
+          return { ...s, sequence: i }
+        })
+        qc.setQueryData(
+          ['all-trip-planned-stops', drafts.map(t => t.id).sort().join(',')],
+          { ...prev, [tripId]: next },
+        )
+      }
+      return { prev }
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) {
+        qc.setQueryData(['all-trip-planned-stops', drafts.map(t => t.id).sort().join(',')], ctx.prev)
+      }
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['all-trip-planned-stops'] }),
+  })
+
+  const moveStopMutation = useMutation({
+    mutationFn: ({ tripId, stopId, targetTripId }: { tripId: string; stopId: string; targetTripId: string }) =>
+      api.post(`/trips/${tripId}/planned-stops/${stopId}/move-to/${targetTripId}`).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['all-trip-planned-stops'] }),
   })
 
   const updateTripMutation = useMutation({
@@ -615,6 +651,7 @@ export default function TripPlannerPage() {
                       route={tripRoutes[t.id] ?? null}
                       drivers={drivers}
                       vehicles={vehicles}
+                      otherDrafts={drafts.filter(d => d.id !== t.id)}
                       expanded={expandedTripIds.has(t.id)}
                       hoveredStopId={hoveredStopId}
                       onStopHover={(stopId, on) => setHoveredStopId(on ? stopId : null)}
@@ -623,6 +660,8 @@ export default function TripPlannerPage() {
                       onDelete={() => deleteTripMutation.mutate(t.id)}
                       onConfirm={() => confirmTripMutation.mutate(t.id)}
                       onReturnStop={(stopId) => returnToPoolMutation.mutate({ tripId: t.id, stopId })}
+                      onReorder={(stopIds) => reorderStopsMutation.mutate({ tripId: t.id, stopIds })}
+                      onMoveStop={(stopId, targetTripId) => moveStopMutation.mutate({ tripId: t.id, stopId, targetTripId })}
                       confirming={confirmTripMutation.isPending}
                     />
                   ))}
@@ -736,13 +775,14 @@ function PoolItem({
 }
 
 function DraftTripCard({
-  trip, stops, route, drivers, vehicles, expanded, hoveredStopId, onStopHover, onToggle, onUpdate, onDelete, onConfirm, onReturnStop, confirming,
+  trip, stops, route, drivers, vehicles, otherDrafts, expanded, hoveredStopId, onStopHover, onToggle, onUpdate, onDelete, onConfirm, onReturnStop, onReorder, onMoveStop, confirming,
 }: {
   trip: DraftTrip
   stops: PlannedStop[]
   route: RouteGeometry | null
   drivers: Driver[]
   vehicles: Vehicle[]
+  otherDrafts: DraftTrip[]
   expanded: boolean
   hoveredStopId: string | null
   onStopHover: (stopId: string, on: boolean) => void
@@ -751,9 +791,31 @@ function DraftTripCard({
   onDelete: () => void
   onConfirm: () => void
   onReturnStop: (stopId: string) => void
+  onReorder: (stopIds: string[]) => void
+  onMoveStop: (stopId: string, targetTripId: string) => void
   confirming: boolean
 }) {
   const driver = drivers.find(d => d.id === trip.driver_id)
+  const [dragStopId, setDragStopId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ id: string; pos: 'before' | 'after' } | null>(null)
+  const [moveMenuStopId, setMoveMenuStopId] = useState<string | null>(null)
+
+  function handleStopDrop() {
+    const drag = dragStopId
+    const target = dropTarget
+    setDragStopId(null)
+    setDropTarget(null)
+    if (!drag || !target || drag === target.id) return
+    const ids = stops.map(s => s.id)
+    const fromIdx = ids.indexOf(drag)
+    let toIdx = ids.indexOf(target.id)
+    if (fromIdx < 0 || toIdx < 0) return
+    if (target.pos === 'after') toIdx += 1
+    ids.splice(fromIdx, 1)
+    if (fromIdx < toIdx) toIdx -= 1
+    ids.splice(toIdx, 0, drag)
+    onReorder(ids)
+  }
 
   return (
     <div>
@@ -820,29 +882,78 @@ function DraftTripCard({
             </div>
           ) : (
             <div className="space-y-1">
-              {stops.map((s, i) => (
-                <div
-                  key={s.id}
-                  onMouseEnter={() => onStopHover(s.id, true)}
-                  onMouseLeave={() => onStopHover(s.id, false)}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded border transition-colors ${hoveredStopId === s.id ? 'bg-yellow-50 border-yellow-300 ring-1 ring-yellow-300' : 'bg-white border-gray-200'}`}
-                >
-                  <span
-                    className="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: pinHex(s.pin_color) }}
-                  >
-                    {i + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-gray-800 truncate">{s.alias ?? s.address.split(',')[0]}</p>
-                    {s.notes && <p className="text-[10px] text-gray-500 italic truncate">{s.notes}</p>}
+              {stops.map((s, i) => {
+                const isBefore = dropTarget?.id === s.id && dropTarget.pos === 'before' && dragStopId !== s.id
+                const isAfter = dropTarget?.id === s.id && dropTarget.pos === 'after' && dragStopId !== s.id
+                const isBeingDragged = dragStopId === s.id
+                return (
+                  <div key={s.id} className="relative">
+                    {isBefore && <div className="absolute left-0 right-0 -top-0.5 h-0.5 bg-blue-500 rounded-full z-10" />}
+                    <div
+                      draggable
+                      onDragStart={(e) => {
+                        setDragStopId(s.id)
+                        e.dataTransfer.effectAllowed = 'move'
+                      }}
+                      onDragEnd={() => { setDragStopId(null); setDropTarget(null) }}
+                      onDragOver={(e) => {
+                        if (!dragStopId || dragStopId === s.id) return
+                        e.preventDefault()
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const pos: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+                        setDropTarget(prev => (prev?.id === s.id && prev.pos === pos) ? prev : { id: s.id, pos })
+                      }}
+                      onDrop={(e) => { e.preventDefault(); handleStopDrop() }}
+                      onMouseEnter={() => onStopHover(s.id, true)}
+                      onMouseLeave={() => onStopHover(s.id, false)}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded border transition-colors cursor-grab active:cursor-grabbing ${isBeingDragged ? 'opacity-40' : hoveredStopId === s.id ? 'bg-yellow-50 border-yellow-300 ring-1 ring-yellow-300' : 'bg-white border-gray-200'}`}
+                    >
+                      <GripVertical size={11} className="text-gray-300 shrink-0" />
+                      <span
+                        className="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center shrink-0"
+                        style={{ backgroundColor: pinHex(s.pin_color) }}
+                      >
+                        {i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-800 truncate">{s.alias ?? s.address.split(',')[0]}</p>
+                        {s.notes && <p className="text-[10px] text-gray-500 italic truncate">{s.notes}</p>}
+                      </div>
+                      {otherDrafts.length > 0 && (
+                        <div className="relative shrink-0">
+                          <button
+                            onClick={() => setMoveMenuStopId(moveMenuStopId === s.id ? null : s.id)}
+                            title="Mover a otro viaje"
+                            className="text-gray-300 hover:text-blue-500 p-0.5"
+                          >
+                            <MoreVertical size={12} />
+                          </button>
+                          {moveMenuStopId === s.id && (
+                            <div className="absolute right-0 top-5 z-20 bg-white border border-gray-200 rounded-lg shadow-md py-1 min-w-[160px]">
+                              <p className="px-3 py-1 text-[10px] text-gray-400 uppercase tracking-wide">Mover a:</p>
+                              {otherDrafts.map(t => (
+                                <button
+                                  key={t.id}
+                                  onClick={() => { onMoveStop(s.id, t.id); setMoveMenuStopId(null) }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 text-left"
+                                >
+                                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.line_color ?? '#6b7280' }} />
+                                  <span className="truncate">{t.associated_document ?? `Viaje del ${new Date(t.created_at).toLocaleDateString('es-AR')}`}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <button onClick={() => onReturnStop(s.id)} title="Devolver al pool"
+                        className="text-gray-300 hover:text-blue-500 shrink-0">
+                        <RotateCcw size={12} />
+                      </button>
+                    </div>
+                    {isAfter && <div className="absolute left-0 right-0 -bottom-0.5 h-0.5 bg-blue-500 rounded-full z-10" />}
                   </div>
-                  <button onClick={() => onReturnStop(s.id)} title="Devolver al pool"
-                    className="text-gray-300 hover:text-blue-500 shrink-0">
-                    <RotateCcw size={12} />
-                  </button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 
