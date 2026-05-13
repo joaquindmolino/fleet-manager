@@ -24,19 +24,53 @@ class RouteRequest(BaseModel):
     coordinates: list[list[float]] = Field(..., min_length=2)  # [[lng, lat], ...]
 
 
-@router.get("/autocomplete", response_model=list[AutocompleteSuggestion])
-async def autocomplete(
-    current_user: CurrentUser,
-    q: str = Query(..., min_length=2, max_length=200),
-    country: str = Query("ar", min_length=2, max_length=3),
-) -> list[AutocompleteSuggestion]:
-    """Sugerencias de direcciones via Nominatim (OpenStreetMap).
+async def _geocode_google(q: str, country: str) -> list[AutocompleteSuggestion]:
+    """Geocoding via Google Maps Geocoding API. Mejor cobertura de alturas
+    en Argentina y muy resiliente a errores de tipeo. Pago según uso (free
+    tier ~40k requests/mes)."""
+    params = {
+        "address": q,
+        "key": settings.GOOGLE_MAPS_API_KEY,
+        "language": "es",
+    }
+    if country:
+        params["components"] = f"country:{country.upper()}"
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        response = await client.get(
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            params=params,
+        )
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Google Geocoding respondió {response.status_code}",
+        )
+    data = response.json()
+    api_status = data.get("status")
+    # ZERO_RESULTS no es error, solo falta de resultados
+    if api_status in ("OK", "ZERO_RESULTS"):
+        suggestions: list[AutocompleteSuggestion] = []
+        for item in data.get("results", []):
+            label = item.get("formatted_address")
+            loc = item.get("geometry", {}).get("location", {})
+            try:
+                lat = float(loc["lat"])
+                lng = float(loc["lng"])
+            except (KeyError, ValueError, TypeError):
+                continue
+            if label:
+                suggestions.append(AutocompleteSuggestion(label=label, lat=lat, lng=lng))
+        return suggestions
+    # OVER_QUERY_LIMIT, REQUEST_DENIED, INVALID_REQUEST, etc.
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail=f"Google Geocoding: {api_status} - {data.get('error_message', '')}",
+    )
 
-    Nominatim tiene mejor cobertura de alturas en Argentina que ORS Pelias.
-    Es gratis, sin API key, pero rate-limited a ~1 req/segundo y pide un
-    User-Agent identificable. El frontend ya debouncea las consultas.
-    """
-    _ = current_user  # gatear el endpoint con auth
+
+async def _geocode_nominatim(q: str, country: str) -> list[AutocompleteSuggestion]:
+    """Geocoding via Nominatim (OpenStreetMap). Gratis, sin API key. Rate
+    limited a ~1 req/seg y requiere User-Agent identificable."""
     params: dict = {
         "q": q,
         "format": "jsonv2",
@@ -46,34 +80,57 @@ async def autocomplete(
     if country:
         params["countrycodes"] = country.lower()
     headers = {
-        # Nominatim Usage Policy: identificar la app con User-Agent + contacto.
         "User-Agent": "FleetManager/0.1 (contact: support@fleetmanager.app)",
         "Accept-Language": "es",
     }
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        response = await client.get(
+            "https://nominatim.openstreetmap.org/search",
+            params=params,
+            headers=headers,
+        )
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Nominatim respondió {response.status_code}",
+        )
+    suggestions: list[AutocompleteSuggestion] = []
+    for item in response.json():
+        label = item.get("display_name")
+        try:
+            lat = float(item["lat"])
+            lng = float(item["lon"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if label:
+            suggestions.append(AutocompleteSuggestion(label=label, lat=lat, lng=lng))
+    return suggestions
+
+
+@router.get("/autocomplete", response_model=list[AutocompleteSuggestion])
+async def autocomplete(
+    current_user: CurrentUser,
+    q: str = Query(..., min_length=2, max_length=200),
+    country: str = Query("ar", min_length=2, max_length=3),
+) -> list[AutocompleteSuggestion]:
+    """Sugerencias de direcciones.
+
+    Si GOOGLE_MAPS_API_KEY está configurada, usa Google Geocoding (mejor
+    cobertura de alturas, paga). Si no, fallback a Nominatim (OSM, gratis).
+    Si Google falla en runtime, también cae a Nominatim para no dejar al
+    coordinador sin sugerencias.
+    """
+    _ = current_user  # gatear el endpoint con auth
+    if settings.GOOGLE_MAPS_API_KEY:
+        try:
+            return await _geocode_google(q, country)
+        except HTTPException:
+            # Fallback silencioso a Nominatim si Google falla
+            pass
+        except httpx.HTTPError:
+            pass
     try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            response = await client.get(
-                "https://nominatim.openstreetmap.org/search",
-                params=params,
-                headers=headers,
-            )
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Geocoding respondió {response.status_code}",
-            )
-        data = response.json()
-        suggestions: list[AutocompleteSuggestion] = []
-        for item in data:
-            label = item.get("display_name")
-            try:
-                lat = float(item["lat"])
-                lng = float(item["lon"])
-            except (KeyError, ValueError, TypeError):
-                continue
-            if label:
-                suggestions.append(AutocompleteSuggestion(label=label, lat=lat, lng=lng))
-        return suggestions
+        return await _geocode_nominatim(q, country)
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

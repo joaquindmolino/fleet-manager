@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # OpenRouteService (ruteo vehicular)
     ORS_API_KEY: str = ""
 
+    # Google Maps (geocoding de direcciones). Si no está seteada,
+    # el geocoding cae a Nominatim (OpenStreetMap, gratis).
+    GOOGLE_MAPS_API_KEY: str = ""
+
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
         if self.ENVIRONMENT == "production":
