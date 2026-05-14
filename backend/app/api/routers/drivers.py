@@ -15,6 +15,30 @@ from app.schemas.common import PaginatedResponse
 from app.schemas.driver import DriverCreate, DriverResponse, DriverUpdate, MyDriverResponse
 from app.services.fleet_sync import sync_fleet_for_driver
 
+
+def _is_admin_level(user: User) -> bool:
+    if user.is_superadmin:
+        return True
+    for ov in user.permission_overrides:
+        if ov.permission.module == "configuracion" and ov.permission.action == "editar":
+            return ov.granted
+    return user.role is not None and any(
+        p.module == "configuracion" and p.action == "editar" for p in user.role.permissions
+    )
+
+
+def _can_manage_all_drivers(user: User) -> bool:
+    """Admin o usuario con conductores:editar ve todos los choferes del tenant.
+    El resto solo ve los choferes que tiene asignados como coordinador."""
+    if _is_admin_level(user):
+        return True
+    for ov in user.permission_overrides:
+        if ov.permission.module == "conductores" and ov.permission.action == "editar":
+            return ov.granted
+    return user.role is not None and any(
+        p.module == "conductores" and p.action == "editar" for p in user.role.permissions
+    )
+
 router = APIRouter(prefix="/drivers", tags=["drivers"])
 
 _can_ver = Depends(make_permission_checker("conductores", "ver"))
@@ -74,16 +98,18 @@ async def list_drivers(
     if self_driver is not None:
         # Chofer: solo puede ver su propio perfil
         base_filter = base_filter & (Driver.id == self_driver.id)
-    else:
-        # Si el usuario tiene asignaciones de coordinador, restringir a su equipo
+    elif not _can_manage_all_drivers(current_user):
+        # Coordinador (no admin): solo los choferes explícitamente asignados.
+        # Si no tiene asignaciones, no ve ningún chofer (no caemos al fallback "ver todos").
         assigned = (await db.execute(
             select(CoordinatorAssignment.driver_id).where(
                 CoordinatorAssignment.coordinator_user_id == current_user.id,
                 CoordinatorAssignment.tenant_id == current_user.tenant_id,
             )
         )).scalars().all()
-        if assigned:
-            base_filter = base_filter & Driver.id.in_(assigned)
+        if not assigned:
+            return PaginatedResponse(items=[], total=0, page=page, size=size, pages=1)
+        base_filter = base_filter & Driver.id.in_(assigned)
 
     total = (
         await db.execute(select(func.count()).select_from(Driver).where(base_filter))
