@@ -11,7 +11,8 @@ class TenantCreate(BaseModel):
     name: str
     slug: str
     plan: Literal["trial", "basic", "pro", "enterprise"] = "trial"
-    admin_email: EmailStr
+    admin_username: str
+    admin_email: EmailStr | None = None
     admin_nombre: str
     admin_password: str
 
@@ -19,6 +20,14 @@ class TenantCreate(BaseModel):
     @classmethod
     def slug_format(cls, v: str) -> str:
         return v.strip().lower().replace(" ", "-")[:50]
+
+    @field_validator("admin_username")
+    @classmethod
+    def username_format(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 3:
+            raise ValueError("El usuario debe tener al menos 3 caracteres")
+        return v
 
     @field_validator("admin_password")
     @classmethod

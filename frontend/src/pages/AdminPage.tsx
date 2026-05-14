@@ -32,6 +32,7 @@ const EMPTY_FORM = {
   name: '',
   slug: '',
   plan: 'trial' as const,
+  admin_username: '',
   admin_email: '',
   admin_nombre: '',
   admin_password: '',
@@ -91,7 +92,10 @@ export default function AdminPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setFormError('')
-    createMutation.mutate(form)
+    // Email es opcional: si está vacío, mandamos null para que Pydantic no
+    // lo rechace como "no es un email válido".
+    const body = { ...form, admin_email: form.admin_email.trim() || null }
+    createMutation.mutate(body as unknown as typeof EMPTY_FORM)
   }
 
   return (
@@ -167,9 +171,19 @@ export default function AdminPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Email *</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Usuario *</label>
                 <input
                   required
+                  type="text"
+                  value={form.admin_username}
+                  onChange={e => setForm(f => ({ ...f, admin_username: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="jgarcia"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Email (opcional)</label>
+                <input
                   type="email"
                   value={form.admin_email}
                   onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))}

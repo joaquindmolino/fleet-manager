@@ -65,8 +65,20 @@ async def create_tenant(
         select(Role).where(Role.tenant_id == tenant.id, Role.name == "Administrador")
     )).scalar_one_or_none()
 
+    # Validar unicidad de username dentro del tenant (case-insensitive)
+    username_clean = body.admin_username.strip()
+    existing_username = (await db.execute(
+        select(User.id).where(
+            User.tenant_id == tenant.id,
+            func.lower(User.username) == username_clean.lower(),
+        )
+    )).scalar_one_or_none()
+    if existing_username:
+        raise HTTPException(status_code=409, detail="El usuario ya existe en este tenant.")
+
     admin = User(
         id=uuid.uuid4(), tenant_id=tenant.id,
+        username=username_clean,
         email=body.admin_email, full_name=body.admin_nombre,
         hashed_password=hash_password(body.admin_password),
         is_active=True, is_superadmin=False,
