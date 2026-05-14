@@ -11,6 +11,7 @@ from app.models.driver import Driver
 from app.models.machine import Machine
 from app.models.user import User
 from app.schemas.coordinator import CoordinatorAssignmentsResponse, SetCoordinatorAssignments
+from app.services.fleet_sync import sync_fleet_for_coordinator
 
 router = APIRouter(prefix="/coordinator-assignments", tags=["coordinators"])
 
@@ -102,6 +103,9 @@ async def set_user_assignments(
             coordinator_user_id=user_id,
             driver_id=driver_id,
         ))
+
+    # Auto-asignar a la flota del coordinador los vehículos de sus choferes.
+    await sync_fleet_for_coordinator(db, user_id, body.driver_ids, current_user.tenant_id)
 
     await db.flush()
     return CoordinatorAssignmentsResponse(coordinator_user_id=user_id, driver_ids=body.driver_ids)

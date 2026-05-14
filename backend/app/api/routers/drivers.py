@@ -13,6 +13,7 @@ from app.models.driver import Driver
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
 from app.schemas.driver import DriverCreate, DriverResponse, DriverUpdate, MyDriverResponse
+from app.services.fleet_sync import sync_fleet_for_driver
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
 
@@ -114,6 +115,10 @@ async def create_driver(body: DriverCreate, current_user: CurrentUser, db: DbSes
     db.add(driver)
     await db.flush()
     await db.refresh(driver)
+    # Si el chofer ya viene con vehículo, sincronizar la flota de los coordinadores que lo tengan.
+    if driver.vehicle_id is not None:
+        await sync_fleet_for_driver(db, driver.id, current_user.tenant_id)
+        await db.flush()
     return driver
 
 
@@ -147,8 +152,13 @@ async def update_driver(
     data = body.model_dump(exclude_unset=True)
     if "user_id" in data:
         await _validate_user_id(data["user_id"], current_user.tenant_id, db, exclude_driver_id=driver_id)
+    vehicle_changed = "vehicle_id" in data and data["vehicle_id"] != driver.vehicle_id
     for field, value in data.items():
         setattr(driver, field, value)
     await db.flush()
     await db.refresh(driver)
+    # Si cambió el vehículo del chofer, agregar a la flota de los coordinadores que lo tengan.
+    if vehicle_changed and driver.vehicle_id is not None:
+        await sync_fleet_for_driver(db, driver.id, current_user.tenant_id)
+        await db.flush()
     return driver
