@@ -1032,22 +1032,10 @@ function DraftTripCard({
             </div>
           </div>
 
-          {/* Inicio del viaje */}
+          {/* Inicio del viaje: el contenedor externo recibe drops de paradas;
+              el header interno es el drag source (para devolver el origen a paradas). */}
           <div
             className={`space-y-1 pt-1 -mx-1 px-1 py-1 rounded transition-colors ${originDropOver ? 'bg-green-50 ring-1 ring-green-300' : ''} ${draggingOrigin ? 'opacity-50' : ''}`}
-            draggable={hasOrigin}
-            onDragStart={(e) => {
-              if (!hasOrigin) return
-              dragKindRef.current = 'origin'
-              setDraggingOrigin(true)
-              e.dataTransfer.effectAllowed = 'move'
-              e.dataTransfer.setData('text/plain', 'origin')
-            }}
-            onDragEnd={() => {
-              dragKindRef.current = null
-              setDraggingOrigin(false)
-              setStopsDropOver(false)
-            }}
             onDragOver={(e) => {
               if (dragKindRef.current !== 'stop' || !dragStopIdRef.current) return
               e.preventDefault()
@@ -1067,11 +1055,33 @@ function DraftTripCard({
               onPromoteToOrigin(draggedId)
             }}
           >
-            <label className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold flex items-center gap-1">
-              <Flag size={10} /> Inicio del viaje
-              {originDropOver && <span className="text-green-600 normal-case">— soltá para usar como inicio</span>}
-              {hasOrigin && !originDropOver && <span className="text-gray-400 normal-case">— arrastrá hacia las paradas para volver</span>}
-            </label>
+            <div
+              className={`flex items-center justify-between gap-1 ${hasOrigin ? 'cursor-grab active:cursor-grabbing hover:bg-gray-100 -mx-0.5 px-0.5 rounded' : ''}`}
+              draggable={hasOrigin}
+              onDragStart={(e) => {
+                if (!hasOrigin) { e.preventDefault(); return }
+                dragKindRef.current = 'origin'
+                setDraggingOrigin(true)
+                e.dataTransfer.effectAllowed = 'move'
+                e.dataTransfer.setData('text/plain', 'origin')
+              }}
+              onDragEnd={() => {
+                dragKindRef.current = null
+                setDraggingOrigin(false)
+                setStopsDropOver(false)
+              }}
+            >
+              <label className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold flex items-center gap-1 pointer-events-none">
+                <Flag size={10} /> Inicio del viaje
+                {originDropOver && <span className="text-green-600 normal-case">— soltá para usar como inicio</span>}
+              </label>
+              {hasOrigin && !originDropOver && (
+                <span className="flex items-center gap-1 text-[10px] text-gray-400 pointer-events-none">
+                  <GripVertical size={11} />
+                  <span className="normal-case">arrastrar a paradas</span>
+                </span>
+              )}
+            </div>
             <AddressAutocomplete
               value={originText}
               onChange={text => {
