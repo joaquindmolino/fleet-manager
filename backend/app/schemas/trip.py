@@ -71,6 +71,9 @@ class TripResponse(TripBase):
     end_lat: float | None = None
     end_lng: float | None = None
     line_color: str | None = None
+    # Cantidad de paradas planificadas por el coordinador (desde el despachador).
+    # Se completa explícitamente en los endpoints que listan/devuelven trips.
+    planned_stops_count: int = 0
     status: EstadoViaje
     created_at: datetime
 

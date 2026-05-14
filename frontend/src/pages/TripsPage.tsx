@@ -191,7 +191,7 @@ export default function TripsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                {['Documento', 'Cliente', 'Conductor / Vehículo', 'Fecha', 'Paradas', 'Km odóm.', 'Observaciones', 'Estado', ''].map(h => (
+                {['Viaje', 'Documento asoc.', 'Cliente', 'Conductor / Vehículo', 'Fecha', 'Paradas', 'Km odóm.', 'Observaciones', 'Estado', ''].map(h => (
                   <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -213,6 +213,7 @@ export default function TripsPage() {
                       notes: addForm.notes || null,
                     })
                   }} />
+                  <td className="px-3 py-2 text-gray-400 text-xs italic">—</td>
                   <td className="px-3 py-2"><input form="add-tr" value={addForm.associated_document} onChange={e => af('associated_document', e.target.value)} placeholder="Nro. documento" className={CI} /></td>
                   <td className="px-3 py-2">
                     <select form="add-tr" value={addForm.client_id} onChange={e => af('client_id', e.target.value)} className={CS}>
@@ -245,14 +246,18 @@ export default function TripsPage() {
               )}
 
               {data?.items.length === 0 && !addingRow
-                ? <tr><td colSpan={9} className="p-12 text-center"><Route size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay viajes registrados.</p></td></tr>
+                ? <tr><td colSpan={10} className="p-12 text-center"><Route size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay viajes registrados.</p></td></tr>
                 : data?.items.map(t => {
                   const v = vehicleMap[t.vehicle_id]
                   const d = t.driver_id ? driverMap[t.driver_id] : null
                   const clientName = t.client_id ? (clientMap[t.client_id]?.name ?? '—') : '—'
+                  const stopsLabel = t.planned_stops_count > 0
+                    ? t.planned_stops_count
+                    : (t.stops_count ?? '—')
                   return editingId === t.id ? (
                     <tr key={t.id} className={editRow}>
                       <form id={`e-${t.id}`} onSubmit={e => { e.preventDefault(); updateMutation.mutate({ id: t.id, body: { associated_document: editForm.associated_document || null, notes: editForm.notes || null, end_odometer: editForm.end_odometer ? parseInt(editForm.end_odometer) : null } }) }} />
+                      <td className="px-3 py-2 text-gray-700 text-xs font-medium">{t.name ?? <span className="text-gray-400 italic">Sin nombre</span>}</td>
                       <td className="px-3 py-2"><input form={`e-${t.id}`} value={editForm.associated_document} onChange={e => ef('associated_document', e.target.value)} placeholder="Nro. documento" className={CI} /></td>
                       <td className="px-3 py-2 text-gray-400 text-xs">{clientName}</td>
                       <td className="px-3 py-2 text-gray-400 text-xs">
@@ -263,7 +268,7 @@ export default function TripsPage() {
                         <div>{formatDate(t)}</div>
                         {dateLabel(t) && <div className="text-[10px] mt-0.5">{dateLabel(t)}</div>}
                       </td>
-                      <td className="px-3 py-2 text-gray-400 text-xs text-center">{t.stops_count ?? '—'}</td>
+                      <td className="px-3 py-2 text-gray-400 text-xs text-center">{stopsLabel}</td>
                       <td className="px-3 py-2"><input form={`e-${t.id}`} type="number" min="0" value={editForm.end_odometer} onChange={e => ef('end_odometer', e.target.value)} placeholder="Km final" className={CI} /></td>
                       <td className="px-3 py-2"><input form={`e-${t.id}`} value={editForm.notes} onChange={e => ef('notes', e.target.value)} placeholder="Observaciones" className={CI} /></td>
                       <td className="px-3 py-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[t.status] ?? 'bg-gray-100 text-gray-500'}`}>{STATUS_LABEL[t.status] ?? t.status}</span></td>
@@ -278,8 +283,11 @@ export default function TripsPage() {
                     <tr key={t.id} className={row}>
                       <td className="px-3 py-3 font-medium text-gray-900">
                         <Link to={tripLink(t)} className="hover:text-blue-600 transition-colors">
-                          {t.name ?? t.associated_document ?? <span className="text-gray-400 font-normal text-xs">Sin nombre</span>}
+                          {t.name ?? <span className="text-gray-400 font-normal text-xs">Sin nombre</span>}
                         </Link>
+                      </td>
+                      <td className="px-3 py-3 text-gray-500 text-xs">
+                        {t.associated_document ?? <span className="text-gray-300 italic">—</span>}
                       </td>
                       <td className="px-3 py-3 text-gray-500 text-xs">{clientName}</td>
                       <td className="px-3 py-3 text-xs">
@@ -290,7 +298,7 @@ export default function TripsPage() {
                         <div>{formatDate(t)}</div>
                         {dateLabel(t) && <div className="text-gray-400 text-[10px] mt-0.5">{dateLabel(t)}</div>}
                       </td>
-                      <td className="px-3 py-3 text-gray-500 text-xs text-center">{t.stops_count ?? '—'}</td>
+                      <td className="px-3 py-3 text-gray-500 text-xs text-center">{stopsLabel}</td>
                       <td className="px-3 py-3 text-gray-500 text-xs font-mono">
                         {t.end_odometer ? `${t.end_odometer.toLocaleString()} km` : t.start_odometer ? `${t.start_odometer.toLocaleString()} km` : '—'}
                       </td>

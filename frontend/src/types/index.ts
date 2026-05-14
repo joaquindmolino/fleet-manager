@@ -181,6 +181,7 @@ export interface Trip {
   notes: string | null
   associated_document: string | null
   stops_count: number | null
+  planned_stops_count: number
   line_color: string | null
   share_token: string | null
   created_at: string

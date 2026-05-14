@@ -195,10 +195,25 @@ async def list_trips(
         count_q = count_q.where(Trip.driver_id == driver_id)
 
     total = (await db.execute(count_q)).scalar_one()
-    trips = (
-        await db.execute(query.offset((page - 1) * size).limit(size).order_by(Trip.created_at.desc()))
-    ).scalars().all()
-    return PaginatedResponse(items=trips, total=total, page=page, size=size, pages=math.ceil(total / size) if total else 1)
+    rows = (await db.execute(
+        query
+        .add_columns(
+            select(func.count(TripPlannedStop.id))
+            .where(TripPlannedStop.trip_id == Trip.id)
+            .correlate(Trip)
+            .scalar_subquery()
+            .label("planned_stops_count")
+        )
+        .offset((page - 1) * size)
+        .limit(size)
+        .order_by(Trip.created_at.desc())
+    )).all()
+    items = []
+    for trip, planned_count in rows:
+        resp = TripResponse.model_validate(trip)
+        resp.planned_stops_count = planned_count or 0
+        items.append(resp)
+    return PaginatedResponse(items=items, total=total, page=page, size=size, pages=math.ceil(total / size) if total else 1)
 
 
 @router.post("", response_model=TripResponse, status_code=status.HTTP_201_CREATED, dependencies=[_can_crear])
