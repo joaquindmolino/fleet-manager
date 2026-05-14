@@ -37,6 +37,9 @@ pytz==2024.2
 # Generación de PDFs (hoja de ruta del chofer)
 reportlab==4.2.5
 
+# Exportación a Excel (historial de viajes)
+openpyxl==3.1.5
+
 # Testing
 pytest==8.3.3
 pytest-asyncio==0.24.0

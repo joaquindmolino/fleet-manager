@@ -52,10 +52,32 @@ export default function TripsPage() {
   const [completeModal, setCompleteModal] = useState<CompleteModal | null>(null)
   const [startingId, setStartingId] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  // Solapas + filtros del historial.
+  const [view, setView] = useState<'active' | 'history'>('active')
+  const [historyStatuses, setHistoryStatuses] = useState<string[]>([])  // [] = todos
+  const [historyDateFrom, setHistoryDateFrom] = useState<string>('')
+  const [historyDateTo, setHistoryDateTo] = useState<string>('')
+  const [exporting, setExporting] = useState(false)
+
+  function buildQueryString(includeStatusFilter: boolean): string {
+    const params: string[] = [`page=${page}`, `size=20`]
+    if (view === 'history') {
+      if (includeStatusFilter && historyStatuses.length > 0) {
+        params.push(`status=${historyStatuses.join(',')}`)
+      } else if (includeStatusFilter && historyStatuses.length === 0) {
+        // Pedimos explícitamente todos los estados para que el server no aplique
+        // el default de "solo activos" cuando el caller es un chofer.
+        params.push('status=borrador,pendiente,planificado,en_curso,completado,cancelado')
+      }
+      if (historyDateFrom) params.push(`date_from=${historyDateFrom}T00:00:00`)
+      if (historyDateTo) params.push(`date_to=${historyDateTo}T23:59:59`)
+    }
+    return params.join('&')
+  }
 
   const { data, isLoading } = useQuery({
-    queryKey: ['trips', page],
-    queryFn: () => api.get<PaginatedResponse<Trip>>(`/trips?page=${page}&size=20`).then(r => r.data),
+    queryKey: ['trips', page, view, historyStatuses.join(','), historyDateFrom, historyDateTo],
+    queryFn: () => api.get<PaginatedResponse<Trip>>(`/trips?${buildQueryString(true)}`).then(r => r.data),
   })
 
   const { data: vehicles } = useList<Vehicle>('vehicles', '/vehicles', 100, canSeeVehicles)
@@ -171,9 +193,29 @@ export default function TripsPage() {
     </div>
   )
 
+  async function handleExportXlsx() {
+    setExporting(true)
+    try {
+      const resp = await api.get<Blob>(`/trips/export.xlsx?${buildQueryString(true)}`, { responseType: 'blob' })
+      const url = URL.createObjectURL(resp.data)
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `viajes-${today}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch {
+      alert('No se pudo exportar el Excel.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-2xl font-bold text-gray-900">Viajes</h1><p className="text-sm text-gray-500 mt-0.5">{data?.total ?? '—'} viajes registrados</p></div>
         <div className="hidden md:flex items-center gap-2">
           <Link to="/trips/plan" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
@@ -184,6 +226,87 @@ export default function TripsPage() {
           </button>
         </div>
       </div>
+
+      {/* Solapas: Activos / Historial */}
+      <div className="flex items-center gap-1 mb-4 border-b border-gray-200">
+        <button
+          onClick={() => { setView('active'); setPage(1) }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            view === 'active' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          Activos
+        </button>
+        <button
+          onClick={() => { setView('history'); setPage(1) }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            view === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          Historial
+        </button>
+      </div>
+
+      {/* Barra de filtros: solo en Historial */}
+      {view === 'history' && (
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 mb-4 flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-1">Estado</label>
+            <select
+              multiple
+              value={historyStatuses}
+              onChange={e => {
+                const opts = Array.from(e.target.selectedOptions).map(o => o.value)
+                setHistoryStatuses(opts)
+                setPage(1)
+              }}
+              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs h-24"
+            >
+              <option value="completado">Completado</option>
+              <option value="cancelado">Cancelado</option>
+              <option value="en_curso">En curso</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="planificado">Planificado</option>
+              <option value="borrador">Borrador</option>
+            </select>
+            <p className="text-[10px] text-gray-400 mt-0.5">Ctrl+click para varios. Vacío = todos</p>
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-1">Desde</label>
+            <input
+              type="date"
+              value={historyDateFrom}
+              onChange={e => { setHistoryDateFrom(e.target.value); setPage(1) }}
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-1">Hasta</label>
+            <input
+              type="date"
+              value={historyDateTo}
+              onChange={e => { setHistoryDateTo(e.target.value); setPage(1) }}
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
+            />
+          </div>
+          {(historyStatuses.length > 0 || historyDateFrom || historyDateTo) && (
+            <button
+              onClick={() => { setHistoryStatuses([]); setHistoryDateFrom(''); setHistoryDateTo(''); setPage(1) }}
+              className="text-xs text-gray-500 hover:text-gray-800 underline py-1.5"
+            >
+              Limpiar filtros
+            </button>
+          )}
+          <button
+            onClick={handleExportXlsx}
+            disabled={exporting}
+            className="ml-auto flex items-center gap-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-2 rounded-lg"
+          >
+            {exporting ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
+            Exportar a Excel
+          </button>
+        </div>
+      )}
 
       {/* Desktop table */}
       <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden">

@@ -23,7 +23,9 @@ from app.schemas.trip import (
     TripPlannedStopInput, TripPlannedStopResponse, TripPlannedStopUpdate,
 )
 from app.models.trip import EstadoViaje
+from app.models.client import Client
 from app.services.route_sheet_pdf import RouteSheetData, RouteSheetStop, build_route_sheet_pdf
+from app.services.trips_excel import build_trips_xlsx
 from app.tasks.notifications import _async_notify_trip_assigned, _async_notify_trip_started, _async_notify_trip_completed
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -179,6 +181,55 @@ async def get_active_trip(current_user: CurrentUser, db: DbSession) -> Trip:
     return trip
 
 
+async def _build_trips_query(
+    current_user,
+    db,
+    statuses: list[str] | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    vehicle_id: uuid.UUID | None = None,
+    driver_id: uuid.UUID | None = None,
+):
+    """Construye las queries (select + count) con filtros aplicados y el scope
+    del usuario. Devuelve (query, count_q)."""
+    query = select(Trip).where(Trip.tenant_id == current_user.tenant_id)
+    count_q = select(func.count()).select_from(Trip).where(Trip.tenant_id == current_user.tenant_id)
+
+    scope_type, scope_ids = await _get_trip_scope(current_user, db)
+    if scope_type == "driver":
+        # Si el chofer no pidió un filtro explícito, defaulteamos a activos.
+        effective_statuses = statuses or [
+            EstadoViaje.PENDIENTE.value, EstadoViaje.EN_CURSO.value,
+        ]
+        query = query.where(Trip.driver_id.in_(scope_ids), Trip.status.in_(effective_statuses))
+        count_q = count_q.where(Trip.driver_id.in_(scope_ids), Trip.status.in_(effective_statuses))
+    elif scope_type == "coordinator":
+        cond = or_(Trip.driver_id.in_(scope_ids), Trip.driver_id.is_(None))
+        query = query.where(cond)
+        count_q = count_q.where(cond)
+        if statuses:
+            query = query.where(Trip.status.in_(statuses))
+            count_q = count_q.where(Trip.status.in_(statuses))
+    else:
+        if statuses:
+            query = query.where(Trip.status.in_(statuses))
+            count_q = count_q.where(Trip.status.in_(statuses))
+
+    if vehicle_id:
+        query = query.where(Trip.vehicle_id == vehicle_id)
+        count_q = count_q.where(Trip.vehicle_id == vehicle_id)
+    if driver_id:
+        query = query.where(Trip.driver_id == driver_id)
+        count_q = count_q.where(Trip.driver_id == driver_id)
+    if date_from:
+        query = query.where(Trip.created_at >= date_from)
+        count_q = count_q.where(Trip.created_at >= date_from)
+    if date_to:
+        query = query.where(Trip.created_at <= date_to)
+        count_q = count_q.where(Trip.created_at <= date_to)
+    return query, count_q
+
+
 @router.get("", response_model=PaginatedResponse[TripResponse], dependencies=[_can_ver])
 async def list_trips(
     current_user: CurrentUser,
@@ -187,28 +238,16 @@ async def list_trips(
     size: int = 20,
     vehicle_id: uuid.UUID | None = None,
     driver_id: uuid.UUID | None = None,
+    status: str | None = None,  # comma-separated lista de estados, ej "completado,cancelado"
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
 ) -> PaginatedResponse[TripResponse]:
-    query = select(Trip).where(Trip.tenant_id == current_user.tenant_id)
-    count_q = select(func.count()).select_from(Trip).where(Trip.tenant_id == current_user.tenant_id)
-
-    scope_type, scope_ids = await _get_trip_scope(current_user, db)
-    if scope_type == "driver":
-        # Choferes solo ven sus viajes pendientes o en curso (no completados ni cancelados ni borradores).
-        active_statuses = [EstadoViaje.PENDIENTE.value, EstadoViaje.EN_CURSO.value]
-        query = query.where(Trip.driver_id.in_(scope_ids), Trip.status.in_(active_statuses))
-        count_q = count_q.where(Trip.driver_id.in_(scope_ids), Trip.status.in_(active_statuses))
-    elif scope_type == "coordinator":
-        # Coordinadores: ven su equipo + borradores sin driver asignado (en construcción)
-        cond = or_(Trip.driver_id.in_(scope_ids), Trip.driver_id.is_(None))
-        query = query.where(cond)
-        count_q = count_q.where(cond)
-
-    if vehicle_id:
-        query = query.where(Trip.vehicle_id == vehicle_id)
-        count_q = count_q.where(Trip.vehicle_id == vehicle_id)
-    if driver_id:
-        query = query.where(Trip.driver_id == driver_id)
-        count_q = count_q.where(Trip.driver_id == driver_id)
+    statuses = [s.strip() for s in status.split(",") if s.strip()] if status else None
+    query, count_q = await _build_trips_query(
+        current_user, db,
+        statuses=statuses, date_from=date_from, date_to=date_to,
+        vehicle_id=vehicle_id, driver_id=driver_id,
+    )
 
     total = (await db.execute(count_q)).scalar_one()
     rows = (await db.execute(
@@ -776,6 +815,97 @@ async def promote_stop_to_origin(
     await db.flush()
     await db.refresh(trip)
     return trip
+
+
+@router.get("/export.xlsx", dependencies=[_can_ver])
+async def export_trips_xlsx(
+    current_user: CurrentUser,
+    db: DbSession,
+    vehicle_id: uuid.UUID | None = None,
+    driver_id: uuid.UUID | None = None,
+    status: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> Response:
+    """Exporta a Excel los viajes que matchean los filtros (mismos que /trips)."""
+    statuses = [s.strip() for s in status.split(",") if s.strip()] if status else None
+    query, _ = await _build_trips_query(
+        current_user, db,
+        statuses=statuses, date_from=date_from, date_to=date_to,
+        vehicle_id=vehicle_id, driver_id=driver_id,
+    )
+    trips = (await db.execute(
+        query.order_by(Trip.created_at.desc()).limit(5000)
+    )).scalars().all()
+
+    # Pre-cargar maps de driver / vehicle / client / planned_stops_count
+    tenant_id = current_user.tenant_id
+    drivers = {
+        d.id: d for d in (await db.execute(
+            select(Driver).where(Driver.tenant_id == tenant_id)
+        )).scalars().all()
+    }
+    vehicles = {
+        v.id: v for v in (await db.execute(
+            select(Vehicle).where(Vehicle.tenant_id == tenant_id)
+        )).scalars().all()
+    }
+    clients = {
+        c.id: c for c in (await db.execute(
+            select(Client).where(Client.tenant_id == tenant_id)
+        )).scalars().all()
+    }
+    trip_ids = [t.id for t in trips]
+    stops_counts: dict[uuid.UUID, int] = {}
+    if trip_ids:
+        rows = (await db.execute(
+            select(TripPlannedStop.trip_id, func.count(TripPlannedStop.id))
+            .where(TripPlannedStop.trip_id.in_(trip_ids))
+            .group_by(TripPlannedStop.trip_id)
+        )).all()
+        stops_counts = {row[0]: row[1] for row in rows}
+
+    status_label = {
+        "borrador": "Borrador", "pendiente": "Pendiente", "planificado": "Planificado",
+        "en_curso": "En curso", "completado": "Completado", "cancelado": "Cancelado",
+    }
+
+    rows_data = []
+    for t in trips:
+        d = drivers.get(t.driver_id) if t.driver_id else None
+        v = vehicles.get(t.vehicle_id)
+        c = clients.get(t.client_id) if t.client_id else None
+        planned_count = stops_counts.get(t.id, 0)
+        km_recorridos = None
+        if t.start_odometer is not None and t.end_odometer is not None:
+            km_recorridos = t.end_odometer - t.start_odometer
+        rows_data.append({
+            "Nombre del viaje": t.name or "",
+            "Documento asociado": t.associated_document or "",
+            "Cliente": c.name if c else "",
+            "Conductor": d.full_name if d else "",
+            "Vehículo": v.plate if v else "",
+            "Estado": status_label.get(t.status, t.status),
+            "Fecha de creación": t.created_at,
+            "Fecha programada": t.scheduled_date,
+            "Inicio real": t.start_time,
+            "Fin real": t.end_time,
+            "Origen": t.origin or "",
+            "Destino": t.destination or "",
+            "Paradas": planned_count if planned_count > 0 else (t.stops_count or ""),
+            "Km inicial": t.start_odometer,
+            "Km final": t.end_odometer,
+            "Km recorridos": km_recorridos,
+            "Observaciones": t.notes or "",
+        })
+
+    xlsx_bytes = build_trips_xlsx(rows_data)
+    today = datetime.now().strftime("%Y%m%d")
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="viajes-{today}.xlsx"'},
+    )
 
 
 @router.get(
