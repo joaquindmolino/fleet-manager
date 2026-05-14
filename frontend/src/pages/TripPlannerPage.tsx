@@ -211,6 +211,11 @@ export default function TripPlannerPage() {
     })
   }, [drafts, stopsByTrip])
 
+  // Ref hacia el mutate del assign (estable, pero por seguridad usamos ref).
+  // Se declara antes de las mutations porque se le asigna inmediatamente después
+  // de declarar `assignToTripMutation` y los map markers la consumen vía ref.
+  const assignToTripRef = useRef<((args: { tripId: string; locationIds: string[] }) => void) | null>(null)
+
   // Mutations
   const addPoolMutation = useMutation({
     mutationFn: (body: Omit<PoolLocation, 'id'>) => api.post<PoolLocation>('/pool-locations', body).then(r => r.data),
@@ -368,8 +373,6 @@ export default function TripPlannerPage() {
   // Ref para que el click handler de los markers lea siempre el addModeTripId actual.
   const addModeTripIdRef = useRef<string | null>(null)
   useEffect(() => { addModeTripIdRef.current = addModeTripId }, [addModeTripId])
-  // Ref hacia el mutate del assign (estable, pero por seguridad usamos ref).
-  const assignToTripRef = useRef<((args: { tripId: string; locationIds: string[] }) => void) | null>(null)
 
   useEffect(() => {
     const L = window.L
