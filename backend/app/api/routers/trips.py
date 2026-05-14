@@ -76,6 +76,20 @@ async def quick_trip(body: QuickTripCreate, current_user: CurrentUser, db: DbSes
             detail="No tenés un vehículo asignado. Pedile al administrador que te asigne uno.",
         )
 
+    # Bloquear si ya tiene un viaje pendiente o en curso asignado.
+    blocking = (await db.execute(
+        select(Trip).where(
+            Trip.driver_id == driver.id,
+            Trip.tenant_id == current_user.tenant_id,
+            Trip.status.in_([EstadoViaje.PENDIENTE.value, EstadoViaje.EN_CURSO.value]),
+        ).limit(1)
+    )).scalar_one_or_none()
+    if blocking is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya tenés un viaje asignado pendiente o en curso. Terminá ese antes de iniciar uno nuevo.",
+        )
+
     # Validar odómetro antes de crear el viaje
     vehicle = None
     if body.start_odometer is not None:
@@ -179,8 +193,10 @@ async def list_trips(
 
     scope_type, scope_ids = await _get_trip_scope(current_user, db)
     if scope_type == "driver":
-        query = query.where(Trip.driver_id.in_(scope_ids))
-        count_q = count_q.where(Trip.driver_id.in_(scope_ids))
+        # Choferes solo ven sus viajes pendientes o en curso (no completados ni cancelados ni borradores).
+        active_statuses = [EstadoViaje.PENDIENTE.value, EstadoViaje.EN_CURSO.value]
+        query = query.where(Trip.driver_id.in_(scope_ids), Trip.status.in_(active_statuses))
+        count_q = count_q.where(Trip.driver_id.in_(scope_ids), Trip.status.in_(active_statuses))
     elif scope_type == "coordinator":
         # Coordinadores: ven su equipo + borradores sin driver asignado (en construcción)
         cond = or_(Trip.driver_id.in_(scope_ids), Trip.driver_id.is_(None))

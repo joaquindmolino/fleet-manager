@@ -130,7 +130,23 @@ export default function DashboardPage() {
               <PackageCheck size={18} />
               Continuar reparto
             </button>
-          ) : myDriver?.vehicle ? (
+          ) : pendingTrips && pendingTrips.length === 1 ? (
+            <button
+              onClick={() => navigate(`/trips/${pendingTrips[0].id}`)}
+              className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors shadow-sm"
+            >
+              <PackageCheck size={18} />
+              Iniciar reparto asignado
+            </button>
+          ) : pendingTrips && pendingTrips.length > 1 ? (
+            <button
+              onClick={() => navigate('/trips')}
+              className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors shadow-sm"
+            >
+              <PackageCheck size={18} />
+              Ver repartos asignados ({pendingTrips.length})
+            </button>
+          ) : pendingTrips && pendingTrips.length === 0 && myDriver?.vehicle ? (
             <button
               onClick={() => setQuickTripOpen(true)}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors shadow-sm"
