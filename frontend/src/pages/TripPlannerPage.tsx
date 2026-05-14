@@ -317,6 +317,15 @@ export default function TripPlannerPage() {
     },
   })
 
+  const demoteOriginMutation = useMutation({
+    mutationFn: ({ tripId }: { tripId: string }) =>
+      api.post(`/trips/${tripId}/origin-to-stop`).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trips', 'drafts'] })
+      qc.invalidateQueries({ queryKey: ['all-trip-planned-stops'] })
+    },
+  })
+
   const updateTripMutation = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Partial<Trip> }) =>
       api.patch(`/trips/${id}`, patch).then(r => r.data),
@@ -702,6 +711,7 @@ export default function TripPlannerPage() {
                       onMoveStop={(stopId, targetTripId) => moveStopMutation.mutate({ tripId: t.id, stopId, targetTripId })}
                       onUpdateStop={(stopId, patch) => updateStopMutation.mutate({ tripId: t.id, stopId, patch })}
                       onPromoteToOrigin={(stopId) => promoteToOriginMutation.mutate({ tripId: t.id, stopId })}
+                      onDemoteOrigin={() => demoteOriginMutation.mutate({ tripId: t.id })}
                       confirming={confirmTripMutation.isPending}
                     />
                   ))}
@@ -815,7 +825,7 @@ function PoolItem({
 }
 
 function DraftTripCard({
-  trip, stops, route, drivers, vehicles, otherDrafts, expanded, hoveredStopId, onStopHover, onToggle, onUpdate, onDelete, onConfirm, onReturnStop, onReorder, onMoveStop, onUpdateStop, onPromoteToOrigin, confirming,
+  trip, stops, route, drivers, vehicles, otherDrafts, expanded, hoveredStopId, onStopHover, onToggle, onUpdate, onDelete, onConfirm, onReturnStop, onReorder, onMoveStop, onUpdateStop, onPromoteToOrigin, onDemoteOrigin, confirming,
 }: {
   trip: DraftTrip
   stops: PlannedStop[]
@@ -835,11 +845,16 @@ function DraftTripCard({
   onMoveStop: (stopId: string, targetTripId: string) => void
   onUpdateStop: (stopId: string, patch: Partial<PlannedStop>) => void
   onPromoteToOrigin: (stopId: string) => void
+  onDemoteOrigin: () => void
   confirming: boolean
 }) {
   const driver = drivers.find(d => d.id === trip.driver_id)
   const [dragStopId, setDragStopId] = useState<string | null>(null)
   const dragStopIdRef = useRef<string | null>(null)
+  // 'stop' = arrastrando una parada existente; 'origin' = arrastrando el inicio.
+  const dragKindRef = useRef<'stop' | 'origin' | null>(null)
+  const [draggingOrigin, setDraggingOrigin] = useState(false)
+  const [stopsDropOver, setStopsDropOver] = useState(false)
   const [dropTarget, setDropTarget] = useState<{ id: string; pos: 'before' | 'after' } | null>(null)
   const [moveMenuStopId, setMoveMenuStopId] = useState<string | null>(null)
 
@@ -967,9 +982,22 @@ function DraftTripCard({
 
           {/* Inicio del viaje */}
           <div
-            className={`space-y-1 pt-1 -mx-1 px-1 py-1 rounded transition-colors ${originDropOver ? 'bg-green-50 ring-1 ring-green-300' : ''}`}
+            className={`space-y-1 pt-1 -mx-1 px-1 py-1 rounded transition-colors ${originDropOver ? 'bg-green-50 ring-1 ring-green-300' : ''} ${draggingOrigin ? 'opacity-50' : ''}`}
+            draggable={hasOrigin}
+            onDragStart={(e) => {
+              if (!hasOrigin) return
+              dragKindRef.current = 'origin'
+              setDraggingOrigin(true)
+              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.setData('text/plain', 'origin')
+            }}
+            onDragEnd={() => {
+              dragKindRef.current = null
+              setDraggingOrigin(false)
+              setStopsDropOver(false)
+            }}
             onDragOver={(e) => {
-              if (!dragStopIdRef.current) return
+              if (dragKindRef.current !== 'stop' || !dragStopIdRef.current) return
               e.preventDefault()
               e.dataTransfer.dropEffect = 'move'
               if (!originDropOver) setOriginDropOver(true)
@@ -978,9 +1006,10 @@ function DraftTripCard({
             onDrop={(e) => {
               const draggedId = dragStopIdRef.current
               setOriginDropOver(false)
-              if (!draggedId) return
+              if (!draggedId || dragKindRef.current !== 'stop') return
               e.preventDefault()
               dragStopIdRef.current = null
+              dragKindRef.current = null
               setDragStopId(null)
               setDropTarget(null)
               onPromoteToOrigin(draggedId)
@@ -989,6 +1018,7 @@ function DraftTripCard({
             <label className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold flex items-center gap-1">
               <Flag size={10} /> Inicio del viaje
               {originDropOver && <span className="text-green-600 normal-case">— soltá para usar como inicio</span>}
+              {hasOrigin && !originDropOver && <span className="text-gray-400 normal-case">— arrastrá hacia las paradas para volver</span>}
             </label>
             <AddressAutocomplete
               value={originText}
@@ -1022,11 +1052,55 @@ function DraftTripCard({
 
           {/* Paradas */}
           {stops.length === 0 ? (
-            <div className="text-center py-3 text-xs text-gray-400 italic">
-              Sin paradas. Seleccioná del pool y asignalas.
+            <div
+              className={`text-center py-3 text-xs italic rounded -mx-1 px-1 transition-colors ${stopsDropOver ? 'bg-blue-50 ring-1 ring-blue-300 text-blue-700 not-italic' : 'text-gray-400'}`}
+              onDragOver={(e) => {
+                if (dragKindRef.current !== 'origin') return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                if (!stopsDropOver) setStopsDropOver(true)
+              }}
+              onDragLeave={() => setStopsDropOver(false)}
+              onDrop={(e) => {
+                setStopsDropOver(false)
+                if (dragKindRef.current !== 'origin') return
+                e.preventDefault()
+                dragKindRef.current = null
+                setDraggingOrigin(false)
+                onDemoteOrigin()
+              }}
+            >
+              {stopsDropOver ? 'Soltá para devolver el inicio a las paradas' : 'Sin paradas. Seleccioná del pool y asignalas.'}
             </div>
           ) : (
-            <div className="space-y-1">
+            <div
+              className={`space-y-1 rounded -mx-1 px-1 py-1 transition-colors ${stopsDropOver ? 'bg-blue-50 ring-1 ring-blue-300' : ''}`}
+              onDragOver={(e) => {
+                if (dragKindRef.current !== 'origin') return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                if (!stopsDropOver) setStopsDropOver(true)
+              }}
+              onDragLeave={(e) => {
+                // Solo ocultar si salimos del contenedor entero
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  setStopsDropOver(false)
+                }
+              }}
+              onDrop={(e) => {
+                if (dragKindRef.current !== 'origin') return
+                e.preventDefault()
+                setStopsDropOver(false)
+                dragKindRef.current = null
+                setDraggingOrigin(false)
+                onDemoteOrigin()
+              }}
+            >
+              {stopsDropOver && (
+                <div className="text-center text-[10px] text-blue-700 uppercase tracking-wide font-semibold py-1">
+                  Soltá para devolver el inicio
+                </div>
+              )}
               {stops.map((s, i) => {
                 const isBefore = dropTarget?.id === s.id && dropTarget.pos === 'before' && dragStopId !== s.id
                 const isAfter = dropTarget?.id === s.id && dropTarget.pos === 'after' && dragStopId !== s.id
@@ -1038,11 +1112,17 @@ function DraftTripCard({
                       draggable
                       onDragStart={(e) => {
                         dragStopIdRef.current = s.id
+                        dragKindRef.current = 'stop'
                         setDragStopId(s.id)
                         e.dataTransfer.effectAllowed = 'move'
                         e.dataTransfer.setData('text/plain', s.id)
                       }}
-                      onDragEnd={() => { dragStopIdRef.current = null; setDragStopId(null); setDropTarget(null) }}
+                      onDragEnd={() => {
+                        dragStopIdRef.current = null
+                        dragKindRef.current = null
+                        setDragStopId(null)
+                        setDropTarget(null)
+                      }}
                       onDragOver={(e) => {
                         const drag = dragStopIdRef.current
                         if (!drag || drag === s.id) return

@@ -828,6 +828,54 @@ async def download_route_sheet_pdf(
 
 
 @router.post(
+    "/{trip_id}/origin-to-stop",
+    response_model=TripPlannedStopResponse,
+    dependencies=[_can_editar],
+)
+async def demote_origin_to_stop(
+    trip_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> TripPlannedStop:
+    """Convierte el inicio del viaje en una parada planificada al final de la lista
+    y limpia el origen. Inverso de promote-to-origin."""
+    tid = current_user.tenant_id
+    trip = (await db.execute(
+        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == tid)
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+    if trip.start_lat is None or trip.start_lng is None or not trip.origin or trip.origin == "Por definir":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El viaje no tiene origen definido.")
+
+    current_max = (await db.execute(
+        select(func.max(TripPlannedStop.sequence)).where(TripPlannedStop.trip_id == trip_id)
+    )).scalar_one()
+    next_seq = (current_max + 1) if current_max is not None else 0
+
+    new_stop = TripPlannedStop(
+        tenant_id=tid,
+        trip_id=trip_id,
+        sequence=next_seq,
+        alias=None,
+        address=trip.origin,
+        lat=trip.start_lat,
+        lng=trip.start_lng,
+        service_minutes=15,
+        notes=None,
+        pin_color="gray",
+    )
+    db.add(new_stop)
+
+    trip.origin = "Por definir"
+    trip.start_lat = None
+    trip.start_lng = None
+    await db.flush()
+    await db.refresh(new_stop)
+    return new_stop
+
+
+@router.post(
     "/{trip_id}/share-token",
     dependencies=[_can_ver],
 )
