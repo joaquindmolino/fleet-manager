@@ -163,6 +163,9 @@ export default function TripPlannerPage() {
   const [poolSearch, setPoolSearch] = useState('')
   const [hoveredPoolId, setHoveredPoolId] = useState<string | null>(null)
   const [hoveredStopId, setHoveredStopId] = useState<string | null>(null)
+  // Modo "agregar desde mapa": cuando está activo, clickear un pin del pool
+  // (o un item del sidebar) agrega esa ubicación al viaje señalado.
+  const [addModeTripId, setAddModeTripId] = useState<string | null>(null)
 
   const filteredPool = useMemo(() => {
     const q = poolSearch.trim().toLowerCase()
@@ -244,6 +247,8 @@ export default function TripPlannerPage() {
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['trips', 'drafts'] })
       setExpandedTripIds(prev => new Set([...prev, trip.id]))
+      // Al crear un viaje nuevo, encender modo agregar automáticamente.
+      setAddModeTripId(trip.id)
     },
   })
 
@@ -256,6 +261,7 @@ export default function TripPlannerPage() {
       setSelectedPoolIds(new Set())
     },
   })
+  assignToTripRef.current = assignToTripMutation.mutate
 
   const returnToPoolMutation = useMutation({
     mutationFn: ({ tripId, stopId }: { tripId: string; stopId: string }) =>
@@ -359,6 +365,11 @@ export default function TripPlannerPage() {
   const poolMarkerRefs = useRef<Map<string, LeafletLayer>>(new Map())
   const stopMarkerRefs = useRef<Map<string, LeafletLayer>>(new Map())
   const lastFitSigRef = useRef<string>('')
+  // Ref para que el click handler de los markers lea siempre el addModeTripId actual.
+  const addModeTripIdRef = useRef<string | null>(null)
+  useEffect(() => { addModeTripIdRef.current = addModeTripId }, [addModeTripId])
+  // Ref hacia el mutate del assign (estable, pero por seguridad usamos ref).
+  const assignToTripRef = useRef<((args: { tripId: string; locationIds: string[] }) => void) | null>(null)
 
   useEffect(() => {
     const L = window.L
@@ -390,6 +401,12 @@ export default function TripPlannerPage() {
       const marker = L.marker([p.lat, p.lng], { icon })
       marker.on('mouseover', () => setHoveredPoolId(p.id))
       marker.on('mouseout', () => setHoveredPoolId(null))
+      marker.on('click', () => {
+        const tripId = addModeTripIdRef.current
+        if (tripId && assignToTripRef.current) {
+          assignToTripRef.current({ tripId, locationIds: [p.id] })
+        }
+      })
       marker.addTo(map)
       layersRef.current.push(marker)
       poolMarkerRefs.current.set(p.id, marker)
@@ -528,6 +545,24 @@ export default function TripPlannerPage() {
             <p className="text-xs text-gray-400">{pool.length} en el pool · {drafts.length} viaje{drafts.length !== 1 ? 's' : ''} en borrador</p>
           </div>
         </div>
+        {addModeTripId && (() => {
+          const t = drafts.find(d => d.id === addModeTripId)
+          if (!t) return null
+          const label = t.name ?? `Viaje del ${new Date(t.created_at).toLocaleDateString('es-AR')}`
+          return (
+            <div className="flex items-center gap-2 text-xs bg-blue-100 text-blue-800 px-3 py-1.5 rounded-lg font-medium">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.line_color ?? '#2563eb' }} />
+              <span className="truncate max-w-[180px]">Agregando a: {label}</span>
+              <button
+                onClick={() => setAddModeTripId(null)}
+                className="ml-1 text-blue-700 hover:text-blue-900"
+                title="Salir del modo agregar"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Contenido: mapa + sidebar */}
@@ -629,9 +664,15 @@ export default function TripPlannerPage() {
                     selected={selectedPoolIds.has(p.id)}
                     editing={editingPoolId === p.id}
                     hovered={hoveredPoolId === p.id}
+                    addMode={addModeTripId != null}
                     onHoverChange={(on) => setHoveredPoolId(on ? p.id : null)}
                     onToggle={() => togglePoolSelection(p.id)}
                     onEdit={() => setEditingPoolId(p.id)}
+                    onAddToActiveTrip={() => {
+                      if (addModeTripId) {
+                        assignToTripMutation.mutate({ tripId: addModeTripId, locationIds: [p.id] })
+                      }
+                    }}
                     onSaveEdit={(patch) => { updatePoolMutation.mutate({ id: p.id, patch }); setEditingPoolId(null) }}
                     onCancelEdit={() => setEditingPoolId(null)}
                     onDelete={() => deletePoolMutation.mutate(p.id)}
@@ -712,6 +753,8 @@ export default function TripPlannerPage() {
                       onUpdateStop={(stopId, patch) => updateStopMutation.mutate({ tripId: t.id, stopId, patch })}
                       onPromoteToOrigin={(stopId) => promoteToOriginMutation.mutate({ tripId: t.id, stopId })}
                       onDemoteOrigin={() => demoteOriginMutation.mutate({ tripId: t.id })}
+                      addMode={addModeTripId === t.id}
+                      onToggleAddMode={() => setAddModeTripId(curr => curr === t.id ? null : t.id)}
                       confirming={confirmTripMutation.isPending}
                     />
                   ))}
@@ -747,15 +790,17 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
 }
 
 function PoolItem({
-  item, selected, editing, hovered, onHoverChange, onToggle, onEdit, onSaveEdit, onCancelEdit, onDelete,
+  item, selected, editing, hovered, addMode, onHoverChange, onToggle, onEdit, onAddToActiveTrip, onSaveEdit, onCancelEdit, onDelete,
 }: {
   item: PoolLocation
   selected: boolean
   editing: boolean
   hovered: boolean
+  addMode: boolean
   onHoverChange: (on: boolean) => void
   onToggle: () => void
   onEdit: () => void
+  onAddToActiveTrip: () => void
   onSaveEdit: (patch: Partial<PoolLocation>) => void
   onCancelEdit: () => void
   onDelete: () => void
@@ -800,19 +845,20 @@ function PoolItem({
     <div
       onMouseEnter={() => onHoverChange(true)}
       onMouseLeave={() => onHoverChange(false)}
-      className={`px-3 py-2 flex items-start gap-2 ${hovered ? 'bg-yellow-50 ring-1 ring-yellow-300' : selected ? 'bg-blue-50' : ''}`}
+      className={`px-3 py-2 flex items-start gap-2 ${addMode ? 'cursor-pointer hover:bg-blue-50' : ''} ${hovered ? 'bg-yellow-50 ring-1 ring-yellow-300' : selected ? 'bg-blue-50' : ''}`}
     >
       <input
         type="checkbox"
         checked={selected}
         onChange={onToggle}
+        onClick={e => e.stopPropagation()}
         className="mt-1 shrink-0"
       />
       <span
         className="w-3 h-3 rounded-full shrink-0 mt-1.5"
         style={{ backgroundColor: pinHex(item.pin_color) }}
       />
-      <button onClick={onEdit} className="flex-1 min-w-0 text-left">
+      <button onClick={addMode ? onAddToActiveTrip : onEdit} className="flex-1 min-w-0 text-left" title={addMode ? 'Agregar al viaje activo' : 'Editar'}>
         <p className="text-sm font-medium text-gray-800 truncate">{item.alias ?? item.address.split(',')[0]}</p>
         <p className="text-xs text-gray-400 truncate">{item.address}</p>
         {item.notes && <p className="text-xs text-gray-500 italic truncate mt-0.5">{item.notes}</p>}
@@ -825,7 +871,7 @@ function PoolItem({
 }
 
 function DraftTripCard({
-  trip, stops, route, drivers, vehicles, otherDrafts, expanded, hoveredStopId, onStopHover, onToggle, onUpdate, onDelete, onConfirm, onReturnStop, onReorder, onMoveStop, onUpdateStop, onPromoteToOrigin, onDemoteOrigin, confirming,
+  trip, stops, route, drivers, vehicles, otherDrafts, expanded, hoveredStopId, onStopHover, onToggle, onUpdate, onDelete, onConfirm, onReturnStop, onReorder, onMoveStop, onUpdateStop, onPromoteToOrigin, onDemoteOrigin, addMode, onToggleAddMode, confirming,
 }: {
   trip: DraftTrip
   stops: PlannedStop[]
@@ -846,6 +892,8 @@ function DraftTripCard({
   onUpdateStop: (stopId: string, patch: Partial<PlannedStop>) => void
   onPromoteToOrigin: (stopId: string) => void
   onDemoteOrigin: () => void
+  addMode: boolean
+  onToggleAddMode: () => void
   confirming: boolean
 }) {
   const driver = drivers.find(d => d.id === trip.driver_id)
@@ -915,7 +963,7 @@ function DraftTripCard({
   }, [route, stops, hasOrigin])
 
   return (
-    <div>
+    <div className={addMode ? 'ring-2 ring-blue-400 rounded-lg bg-blue-50/40' : ''}>
       <div className="w-full px-3 py-2.5 flex items-center gap-2 hover:bg-gray-50">
         <button onClick={onToggle} className="shrink-0 flex items-center gap-2">
           {expanded ? <ChevronDown size={14} className="text-gray-400" /> : <ChevronRight size={14} className="text-gray-400" />}
@@ -936,6 +984,7 @@ function DraftTripCard({
           <p className="text-xs text-gray-400 truncate">
             {stops.length} parada{stops.length !== 1 ? 's' : ''}
             {driver && ` · ${driver.full_name}`}
+            {addMode && <span className="ml-1 text-blue-600 font-medium">· Modo agregar activo</span>}
           </p>
         </div>
       </div>
@@ -1223,6 +1272,22 @@ function DraftTripCard({
               })}
             </div>
           )}
+
+          {/* Modo agregar desde mapa */}
+          <button
+            onClick={onToggleAddMode}
+            className={`w-full mt-1 flex items-center justify-center gap-1.5 text-xs font-medium rounded-lg py-1.5 transition-colors ${addMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'border border-blue-200 text-blue-600 hover:bg-blue-50'}`}
+          >
+            {addMode ? (
+              <>
+                <CheckCircle size={12} /> Modo agregar activo — tocá pines o pool · Salir
+              </>
+            ) : (
+              <>
+                <Plus size={12} /> Agregar paradas desde el mapa
+              </>
+            )}
+          </button>
 
           {/* Acciones */}
           <div className="flex gap-2 pt-1">
