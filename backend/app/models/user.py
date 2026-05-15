@@ -108,4 +108,7 @@ class User(Base, TimestampMixin):
     role: Mapped[Role | None] = relationship(back_populates="users")
     permission_overrides: Mapped[list["UserPermission"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     notifications: Mapped[list["Notification"]] = relationship(back_populates="user")  # noqa: F821
-    work_orders: Mapped[list["WorkOrder"]] = relationship(back_populates="assigned_to_user")  # noqa: F821
+    work_orders: Mapped[list["WorkOrder"]] = relationship(  # noqa: F821
+        back_populates="assigned_to_user",
+        foreign_keys="WorkOrder.assigned_to",
+    )

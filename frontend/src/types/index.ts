@@ -113,11 +113,19 @@ export interface WorkOrder {
   description: string
   status: 'abierta' | 'en_progreso' | 'completada' | 'cancelada'
   priority: 'baja' | 'normal' | 'alta' | 'urgente'
+  approval_status: 'pendiente' | 'aprobada' | 'rechazada'
+  approved_by: string | null
+  approved_at: string | null
+  rejection_reason: string | null
+  scheduled_date: string | null
   due_date: string | null
+  completed_date: string | null
   completed_at: string | null
   notes: string | null
-  created_at: string
-  updated_at: string
+  vehicle_plate: string | null
+  machine_name: string | null
+  assigned_to_name: string | null
+  approved_by_name: string | null
 }
 
 export interface MaintenanceService {

@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Wrench, ClipboardList, CheckCircle, Circle } from 'lucide-react'
+import { Plus, Wrench, ClipboardList, Circle } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
-import type { PaginatedResponse, MaintenanceService, MaintenanceRecord, Vehicle, Machine, Supplier, WorkOrder, Tire } from '@/types'
+import WorkOrdersBacklog from '@/components/WorkOrdersBacklog'
+import type { PaginatedResponse, MaintenanceService, MaintenanceRecord, Vehicle, Machine, Supplier, Tire } from '@/types'
 
 const CI = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full min-w-0'
 const CS = CI + ' bg-white'
@@ -22,15 +23,6 @@ const REC_EMPTY: RF = { vehicle_id: '', machine_id: '', service_id: '', supplier
 interface SF { name: string; applies_to: string; interval_km: string; interval_hours: string }
 const SVC_EMPTY: SF = { name: '', applies_to: 'vehiculo', interval_km: '', interval_hours: '' }
 const APPLIES_LABEL: Record<string, string> = { vehiculo: 'Vehículo', camion: 'Camión', camioneta: 'Camioneta', maquina: 'Máquina', ambos: 'Ambos' }
-
-// ── Work Orders ────────────────────────────────────────────────────────────
-interface WF { description: string; priority: string; vehicle_id: string; machine_id: string; due_date: string }
-const WO_EMPTY: WF = { description: '', priority: 'normal', vehicle_id: '', machine_id: '', due_date: '' }
-const STATUS_COLOR: Record<string, string> = { abierta: 'bg-amber-100 text-amber-700', en_progreso: 'bg-blue-100 text-blue-700', completada: 'bg-green-100 text-green-700', cancelada: 'bg-gray-100 text-gray-400' }
-const STATUS_LABEL: Record<string, string> = { abierta: 'Abierta', en_progreso: 'En progreso', completada: 'Completada', cancelada: 'Cancelada' }
-const PRIORITY_COLOR: Record<string, string> = { baja: 'bg-gray-100 text-gray-500', normal: 'bg-blue-100 text-blue-700', alta: 'bg-amber-100 text-amber-700', urgente: 'bg-red-100 text-red-700' }
-const PRIORITY_LABEL: Record<string, string> = { baja: 'Baja', normal: 'Normal', alta: 'Alta', urgente: 'Urgente' }
-const STATUS_FILTERS = [{ value: '', label: 'Todas' }, { value: 'abierta', label: 'Abiertas' }, { value: 'en_progreso', label: 'En progreso' }, { value: 'completada', label: 'Completadas' }, { value: 'cancelada', label: 'Canceladas' }]
 
 // ── Tires ──────────────────────────────────────────────────────────────────
 interface TF { position: string; axle: string; brand: string; model: string; size: string; serial_number: string; km_at_install: string; km_limit: string }
@@ -60,7 +52,6 @@ export default function MaintenancePage() {
   const canSeeVehicles = can('vehiculos', 'ver')
   const canSeeSuppliers = can('proveedores', 'ver')
   const canSeeWorkOrders = can('ordenes_trabajo', 'ver')
-  const canCreateWorkOrders = can('ordenes_trabajo', 'crear')
   const canSeeTires = can('neumaticos', 'ver')
   const canCreateTires = can('neumaticos', 'crear')
 
@@ -78,14 +69,6 @@ export default function MaintenancePage() {
   const [svcEditForm, setSvcEditForm] = useState<SF>({ name: '', applies_to: 'vehiculo', interval_km: '', interval_hours: '' })
   const [svcAddingRow, setSvcAddingRow] = useState(false)
   const [svcAddForm, setSvcAddForm] = useState<SF>(SVC_EMPTY)
-
-  // Work orders state
-  const [woPage, setWoPage] = useState(1)
-  const [woStatusFilter, setWoStatusFilter] = useState('')
-  const [woEditingId, setWoEditingId] = useState<string | null>(null)
-  const [woEditForm, setWoEditForm] = useState<WF>(WO_EMPTY)
-  const [woAddingRow, setWoAddingRow] = useState(false)
-  const [woAddForm, setWoAddForm] = useState<WF>(WO_EMPTY)
 
   // Tires state
   const [tiresVehicleId, setTiresVehicleId] = useState('')
@@ -123,17 +106,6 @@ export default function MaintenancePage() {
     enabled: tab === 'services',
   })
 
-  // Work orders query
-  const { data: workOrders, isLoading: loadingWo } = useQuery({
-    queryKey: ['work-orders', woPage, woStatusFilter],
-    queryFn: () => {
-      const params = new URLSearchParams({ page: String(woPage), size: '20' })
-      if (woStatusFilter) params.set('status_filter', woStatusFilter)
-      return api.get<PaginatedResponse<WorkOrder>>(`/work-orders?${params}`).then(r => r.data)
-    },
-    enabled: tab === 'work_orders' && canSeeWorkOrders,
-  })
-
   // Tires query
   const { data: tires, isLoading: loadingTires } = useQuery({
     queryKey: ['tires', tiresVehicleId],
@@ -149,26 +121,17 @@ export default function MaintenancePage() {
   const createService = useMutation({ mutationFn: (b: object) => api.post('/maintenance/services', b), onSuccess: () => { qc.invalidateQueries({ queryKey: ['maintenance-services'] }); setSvcAddingRow(false); setSvcAddForm(SVC_EMPTY) } })
   const updateService = useMutation({ mutationFn: ({ id, body }: { id: string; body: object }) => api.patch(`/maintenance/services/${id}`, body), onSuccess: () => { qc.invalidateQueries({ queryKey: ['maintenance-services'] }); setSvcEditingId(null) } })
 
-  // Work orders mutations
-  const createWo = useMutation({ mutationFn: (b: object) => api.post('/work-orders', b), onSuccess: () => { qc.invalidateQueries({ queryKey: ['work-orders'] }); qc.invalidateQueries({ queryKey: ['stats'] }); setWoAddingRow(false); setWoAddForm(WO_EMPTY) } })
-  const updateWo = useMutation({ mutationFn: ({ id, body }: { id: string; body: object }) => api.patch(`/work-orders/${id}`, body), onSuccess: () => { qc.invalidateQueries({ queryKey: ['work-orders'] }); setWoEditingId(null) } })
-  const closeWo = useMutation({ mutationFn: (id: string) => api.post(`/work-orders/${id}/close`, {}), onSuccess: () => { qc.invalidateQueries({ queryKey: ['work-orders'] }); qc.invalidateQueries({ queryKey: ['stats'] }) } })
-
   // Tires mutations
   const createTire = useMutation({ mutationFn: (b: object) => api.post('/tires', b), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tires', tiresVehicleId] }); setTiresAddingRow(false); setTiresAddForm(TIRE_EMPTY) } })
   const updateTire = useMutation({ mutationFn: ({ id, body }: { id: string; body: object }) => api.patch(`/tires/${id}`, body), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tires', tiresVehicleId] }); setTiresEditingId(null) } })
 
   function recBody(f: RF) { return { vehicle_id: f.vehicle_id || null, machine_id: f.machine_id || null, service_id: f.service_id || null, supplier_id: f.supplier_id || null, service_date: f.service_date, odometer_at_service: f.odometer_at_service ? parseInt(f.odometer_at_service) : null, cost: f.cost || null } }
   function svcBody(f: SF) { return { name: f.name, applies_to: f.applies_to, interval_km: f.interval_km ? parseInt(f.interval_km) : null, interval_hours: f.interval_hours ? parseInt(f.interval_hours) : null } }
-  function woAddBody(f: WF) { return { description: f.description, priority: f.priority, vehicle_id: f.vehicle_id || null, machine_id: f.machine_id || null, due_date: f.due_date || null } }
-  function woEditBody(f: WF) { return { description: f.description, priority: f.priority, due_date: f.due_date || null } }
 
   function ref(k: keyof RF, v: string) { setRecEditForm(p => ({ ...p, [k]: v })) }
   function raf(k: keyof RF, v: string) { setRecAddForm(p => ({ ...p, [k]: v })) }
   function sef(k: keyof SF, v: string) { setSvcEditForm(p => ({ ...p, [k]: v })) }
   function saf(k: keyof SF, v: string) { setSvcAddForm(p => ({ ...p, [k]: v })) }
-  function wef(k: keyof WF, v: string) { setWoEditForm(p => ({ ...p, [k]: v })) }
-  function waf(k: keyof WF, v: string) { setWoAddForm(p => ({ ...p, [k]: v })) }
   function tef(k: keyof EF, v: string) { setTiresEditForm(p => ({ ...p, [k]: v })) }
   function taf(k: keyof TF, v: string) { setTiresAddForm(p => ({ ...p, [k]: v })) }
 
@@ -178,14 +141,13 @@ export default function MaintenancePage() {
   const addLabel: Record<Tab, string | null> = {
     records: 'Registrar servicio',
     services: 'Agregar tipo',
-    work_orders: canCreateWorkOrders ? 'Nueva orden' : null,
+    work_orders: null, // El botón vive dentro del componente WorkOrdersBacklog.
     tires: (canCreateTires && !!tiresVehicleId) ? 'Agregar neumático' : null,
   }
 
   function handleAdd() {
     if (tab === 'records') { setRecAddingRow(true); setRecEditingId(null); setRecAddForm(REC_EMPTY) }
     else if (tab === 'services') { setSvcAddingRow(true); setSvcEditingId(null); setSvcAddForm(SVC_EMPTY) }
-    else if (tab === 'work_orders') { setWoAddingRow(true); setWoEditingId(null); setWoAddForm(WO_EMPTY) }
     else if (tab === 'tires') { setTiresAddingRow(true); setTiresEditingId(null); setTiresAddForm(TIRE_EMPTY) }
   }
 
@@ -346,80 +308,7 @@ export default function MaintenancePage() {
 
       {/* ── Órdenes de trabajo ─────────────────────────────────────── */}
       {tab === 'work_orders' && canSeeWorkOrders && (
-        <>
-          <div className="flex gap-2 mb-4 flex-wrap">
-            {STATUS_FILTERS.map(({ value, label }) => (
-              <button key={value} onClick={() => { setWoStatusFilter(value); setWoPage(1) }}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${woStatusFilter === value ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            {loadingWo ? <div className="p-12 text-center text-gray-400 text-sm">Cargando...</div> : (
-              <div className="overflow-x-auto"><table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50">
-                    {['Descripción', 'Vehículo', 'Máquina', 'Prioridad', 'Estado', 'Vencimiento', ''].map(h => (
-                      <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {woAddingRow && (
-                    <tr className={addRow}>
-                      <form id="add-wo" onSubmit={e => { e.preventDefault(); createWo.mutate(woAddBody(woAddForm)) }} />
-                      <td className="px-3 py-2"><input form="add-wo" required value={woAddForm.description} onChange={e => waf('description', e.target.value)} placeholder="Descripción *" className={CI} /></td>
-                      <td className="px-3 py-2">{canSeeVehicles ? <select form="add-wo" value={woAddForm.vehicle_id} onChange={e => { waf('vehicle_id', e.target.value); if (e.target.value) waf('machine_id', '') }} className={CS}><option value="">Sin vehículo</option>{(vehicles ?? []).map(v => <option key={v.id} value={v.id}>{v.plate} — {v.brand} {v.model}</option>)}</select> : <span className="text-gray-300 text-xs">—</span>}</td>
-                      <td className="px-3 py-2">{canSeeMachines ? <select form="add-wo" value={woAddForm.machine_id} onChange={e => { waf('machine_id', e.target.value); if (e.target.value) waf('vehicle_id', '') }} className={CS}><option value="">Sin máquina</option>{(machines ?? []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select> : <span className="text-gray-300 text-xs">—</span>}</td>
-                      <td className="px-3 py-2"><select form="add-wo" value={woAddForm.priority} onChange={e => waf('priority', e.target.value)} className={CS}><option value="baja">Baja</option><option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option></select></td>
-                      <td className="px-3 py-2 text-gray-400 text-xs">Abierta</td>
-                      <td className="px-3 py-2"><input form="add-wo" type="date" value={woAddForm.due_date} onChange={e => waf('due_date', e.target.value)} className={CI} /></td>
-                      <td className="px-3 py-2"><div className="flex gap-1"><button form="add-wo" type="submit" disabled={createWo.isPending} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50">Guardar</button><button type="button" onClick={() => setWoAddingRow(false)} className="text-xs border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Cancelar</button></div></td>
-                    </tr>
-                  )}
-                  {workOrders?.items.length === 0 && !woAddingRow
-                    ? <tr><td colSpan={7} className="p-12 text-center"><ClipboardList size={32} className="text-gray-300 mx-auto mb-3" /><p className="text-gray-500 text-sm">No hay órdenes de trabajo.</p></td></tr>
-                    : workOrders?.items.map(o => {
-                      const veh = o.vehicle_id ? vehicleMap[o.vehicle_id] : null
-                      const mac = o.machine_id ? machineMap[o.machine_id] : null
-                      return woEditingId === o.id ? (
-                        <tr key={o.id} className={editRow}>
-                          <form id={`ewo-${o.id}`} onSubmit={e => { e.preventDefault(); updateWo.mutate({ id: o.id, body: woEditBody(woEditForm) }) }} />
-                          <td className="px-3 py-2"><input form={`ewo-${o.id}`} required value={woEditForm.description} onChange={e => wef('description', e.target.value)} className={CI} /></td>
-                          <td className="px-3 py-2 text-gray-400 text-xs">{veh ? veh.plate : '—'}</td>
-                          <td className="px-3 py-2 text-gray-400 text-xs">{mac ? mac.name : '—'}</td>
-                          <td className="px-3 py-2"><select form={`ewo-${o.id}`} value={woEditForm.priority} onChange={e => wef('priority', e.target.value)} className={CS}><option value="baja">Baja</option><option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option></select></td>
-                          <td className="px-3 py-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[o.status]}`}>{STATUS_LABEL[o.status]}</span></td>
-                          <td className="px-3 py-2"><input form={`ewo-${o.id}`} type="date" value={woEditForm.due_date} onChange={e => wef('due_date', e.target.value)} className={CI} /></td>
-                          <td className="px-3 py-2"><div className="flex gap-1"><button form={`ewo-${o.id}`} type="submit" disabled={updateWo.isPending} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50">Guardar</button><button type="button" onClick={() => setWoEditingId(null)} className="text-xs border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Cancelar</button></div></td>
-                        </tr>
-                      ) : (
-                        <tr key={o.id} className={row}>
-                          <td className="px-3 py-3 text-gray-800 max-w-xs"><span className="line-clamp-2">{o.description}</span></td>
-                          <td className="px-3 py-3 text-gray-500 font-mono text-xs">{veh ? veh.plate : '—'}</td>
-                          <td className="px-3 py-3 text-gray-500 text-xs">{mac ? mac.name : '—'}</td>
-                          <td className="px-3 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${PRIORITY_COLOR[o.priority]}`}>{PRIORITY_LABEL[o.priority] ?? o.priority}</span></td>
-                          <td className="px-3 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[o.status]}`}>{STATUS_LABEL[o.status] ?? o.status}</span></td>
-                          <td className="px-3 py-3 text-gray-500 text-xs">{o.due_date ? new Date(o.due_date).toLocaleDateString('es-AR') : '—'}</td>
-                          <td className="px-3 py-3"><div className="flex items-center justify-end gap-2">{(o.status === 'abierta' || o.status === 'en_progreso') && <button onClick={() => closeWo.mutate(o.id)} disabled={closeWo.isPending} title="Cerrar orden" className="text-green-600 hover:text-green-800 transition-colors"><CheckCircle size={15} /></button>}<button onClick={() => { setWoAddingRow(false); setWoEditingId(o.id); setWoEditForm({ description: o.description, priority: o.priority, vehicle_id: o.vehicle_id ?? '', machine_id: o.machine_id ?? '', due_date: o.due_date ?? '' }) }} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Editar</button></div></td>
-                        </tr>
-                      )
-                    })}
-                </tbody>
-              </table></div>
-            )}
-            {workOrders && workOrders.pages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-                <span className="text-xs text-gray-400">Página {workOrders.page} de {workOrders.pages}</span>
-                <div className="flex gap-2">
-                  <button disabled={woPage === 1} onClick={() => setWoPage(p => p - 1)} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Anterior</button>
-                  <button disabled={woPage === workOrders.pages} onClick={() => setWoPage(p => p + 1)} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Siguiente</button>
-                </div>
-              </div>
-            )}
-          </div>
-        </>
+        <WorkOrdersBacklog enabled={tab === 'work_orders'} />
       )}
 
       {/* ── Neumáticos ─────────────────────────────────────────────── */}
