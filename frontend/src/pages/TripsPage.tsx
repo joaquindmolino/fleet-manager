@@ -249,8 +249,23 @@ export default function TripsPage() {
       link.click()
       document.body.removeChild(link)
       setTimeout(() => URL.revokeObjectURL(url), 1000)
-    } catch {
-      alert('No se pudo exportar el Excel.')
+    } catch (e: unknown) {
+      // Si el backend devolvió JSON con detail pero pedimos blob, hay que parsearlo a mano.
+      const err = e as { response?: { data?: Blob | { detail?: string }; status?: number }; message?: string }
+      let msg = err?.message ?? 'No se pudo exportar el Excel.'
+      const data = err?.response?.data
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text()
+          const parsed = JSON.parse(text)
+          if (parsed?.detail) msg = parsed.detail
+        } catch {
+          // no era JSON, dejamos el message
+        }
+      } else if (data && typeof data === 'object' && 'detail' in data && data.detail) {
+        msg = data.detail
+      }
+      alert(`Error al exportar: ${msg}`)
     } finally {
       setExporting(false)
     }
