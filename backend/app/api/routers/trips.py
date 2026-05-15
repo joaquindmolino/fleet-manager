@@ -496,6 +496,19 @@ async def start_trip(
     if body and body.start_lat is not None and body.start_lng is not None:
         trip.start_lat = body.start_lat
         trip.start_lng = body.start_lng
+    if body and body.start_odometer is not None:
+        # Validamos contra el odómetro actual del vehículo.
+        vehicle = (await db.execute(
+            select(Vehicle).where(Vehicle.id == trip.vehicle_id)
+        )).scalar_one_or_none()
+        if vehicle and body.start_odometer < (vehicle.odometer or 0):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"El odómetro no puede ser menor al actual ({vehicle.odometer} km).",
+            )
+        trip.start_odometer = body.start_odometer
+        if vehicle:
+            vehicle.odometer = body.start_odometer
     await db.flush()
     await db.refresh(trip)
     bg.add_task(_async_notify_trip_started, str(trip.id))

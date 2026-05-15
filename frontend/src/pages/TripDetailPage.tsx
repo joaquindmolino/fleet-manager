@@ -8,6 +8,7 @@ import {
 import { api } from '@/lib/api'
 import { captureLocation } from '@/lib/geolocation'
 import { RouteSheetActions } from '@/pages/TripPlannerPage'
+import StartTripModal from '@/components/StartTripModal'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
 import TripStopsMapModal from '@/components/TripStopsMapModal'
@@ -79,6 +80,7 @@ export default function TripDetailPage() {
   const [editing, setEditing] = useState(false)
   const [cancelConfirm, setCancelConfirm] = useState(false)
   const [mapOpen, setMapOpen] = useState(false)
+  const [startModalOpen, setStartModalOpen] = useState(false)
   const [editForm, setEditForm] = useState<EF>({
     associated_document: '', origin: '', destination: '',
     notes: '', stops_count: '', start_odometer: '', client_id: '',
@@ -128,17 +130,24 @@ export default function TripDetailPage() {
   })
 
   const startMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (odometer: number | null) => {
       // Capturamos GPS en background; si falla, arrancamos igual sin coords.
       const coords = await captureLocation()
-      const body = coords ? { start_lat: coords.lat, start_lng: coords.lng } : {}
+      const body: Record<string, unknown> = {}
+      if (coords) { body.start_lat = coords.lat; body.start_lng = coords.lng }
+      if (odometer != null) body.start_odometer = odometer
       return api.post<Trip>(`/trips/${id}/start`, body).then(r => r.data)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['trips', 'active'] })
       qc.invalidateQueries({ queryKey: ['trips', 'pending'] })
+      setStartModalOpen(false)
       navigate('/delivery')
+    },
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
+      const detail = err?.response?.data?.detail
+      if (detail) alert(detail)
     },
   })
 
@@ -427,7 +436,7 @@ export default function TripDetailPage() {
         <div className="space-y-2 mb-6">
           {trip.status === 'pendiente' && (
             <button
-              onClick={() => startMutation.mutate()}
+              onClick={() => setStartModalOpen(true)}
               disabled={startMutation.isPending}
               className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors"
             >
@@ -496,6 +505,17 @@ export default function TripDetailPage() {
           endLat={trip.end_lat}
           endLng={trip.end_lng}
           onClose={() => setMapOpen(false)}
+        />
+      )}
+
+      {startModalOpen && (
+        <StartTripModal
+          tripName={trip.name ?? trip.associated_document ?? 'Reparto'}
+          vehiclePlate={vehicle?.plate ?? null}
+          currentOdometer={vehicle?.odometer ?? null}
+          starting={startMutation.isPending}
+          onConfirm={(odo) => startMutation.mutate(odo)}
+          onClose={() => setStartModalOpen(false)}
         />
       )}
 

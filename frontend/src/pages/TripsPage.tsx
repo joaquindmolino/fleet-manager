@@ -5,6 +5,7 @@ import { Plus, Route, Play, Loader2, ChevronRight, Navigation, Map as MapIcon, F
 import { api } from '@/lib/api'
 import { captureLocation } from '@/lib/geolocation'
 import { downloadRouteSheet, copyPublicRouteSheetUrl } from '@/lib/downloads'
+import StartTripModal from '@/components/StartTripModal'
 import { useList } from '@/hooks/useList'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { PaginatedResponse, Trip, Vehicle, Driver, Client } from '@/types'
@@ -51,6 +52,7 @@ export default function TripsPage() {
   const [addForm, setAddForm] = useState<TF>(EMPTY)
   const [completeModal, setCompleteModal] = useState<CompleteModal | null>(null)
   const [startingId, setStartingId] = useState<string | null>(null)
+  const [startModalTrip, setStartModalTrip] = useState<Trip | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   // Solapas + filtros del historial.
   // Hay dos pares de estado:
@@ -137,9 +139,11 @@ export default function TripsPage() {
   })
 
   const startMutation = useMutation({
-    mutationFn: async (tripId: string) => {
+    mutationFn: async ({ tripId, odometer }: { tripId: string; odometer: number | null }) => {
       const coords = await captureLocation()
-      const body = coords ? { start_lat: coords.lat, start_lng: coords.lng } : {}
+      const body: Record<string, unknown> = {}
+      if (coords) { body.start_lat = coords.lat; body.start_lng = coords.lng }
+      if (odometer != null) body.start_odometer = odometer
       return api.post<Trip>(`/trips/${tripId}/start`, body).then(r => r.data)
     },
     onSuccess: () => {
@@ -147,9 +151,14 @@ export default function TripsPage() {
       qc.invalidateQueries({ queryKey: ['trips', 'active'] })
       qc.invalidateQueries({ queryKey: ['trips', 'pending'] })
       setStartingId(null)
+      setStartModalTrip(null)
       navigate('/delivery')
     },
-    onError: () => setStartingId(null),
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
+      setStartingId(null)
+      const detail = err?.response?.data?.detail
+      if (detail) alert(detail)
+    },
   })
 
   function handleStart(t: Trip) {
@@ -163,8 +172,8 @@ export default function TripsPage() {
         if (!window.confirm(`Este viaje está programado para el ${dateStr}. ¿Querés iniciarlo de todas formas?`)) return
       }
     }
-    setStartingId(t.id)
-    startMutation.mutate(t.id)
+    // Abrimos el modal para pedir km (opcional). El startMutation se dispara cuando el usuario confirma.
+    setStartModalTrip(t)
   }
 
   const backToDraftMutation = useMutation({
@@ -662,6 +671,21 @@ export default function TripsPage() {
         )}
         {pagination}
       </div>
+
+      {startModalTrip && (() => {
+        const t = startModalTrip
+        const v = vehicleMap[t.vehicle_id]
+        return (
+          <StartTripModal
+            tripName={t.name ?? t.associated_document ?? 'Reparto'}
+            vehiclePlate={v?.plate ?? null}
+            currentOdometer={v?.odometer ?? null}
+            starting={startMutation.isPending}
+            onConfirm={(odo) => { setStartingId(t.id); startMutation.mutate({ tripId: t.id, odometer: odo }) }}
+            onClose={() => setStartModalTrip(null)}
+          />
+        )
+      })()}
 
       {completeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">

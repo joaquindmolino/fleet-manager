@@ -81,9 +81,10 @@ class TripResponse(TripBase):
 
 
 class TripStartBody(BaseModel):
-    """Body opcional al iniciar un viaje: GPS de la ubicación de partida."""
+    """Body opcional al iniciar un viaje: GPS de partida + odómetro inicial."""
     start_lat: float | None = None
     start_lng: float | None = None
+    start_odometer: int | None = None
 
 
 class TripCompleteBody(BaseModel):
