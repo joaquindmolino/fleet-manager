@@ -10,8 +10,9 @@ import { downloadRouteSheet, shareRouteSheetFile, copyPublicRouteSheetUrl } from
 import { api } from '@/lib/api'
 import { useList } from '@/hooks/useList'
 import AddressAutocomplete from '@/components/AddressAutocomplete'
+import ClientCombobox from '@/components/ClientCombobox'
 import type { LeafletMap, LeafletLayer } from '@/lib/leaflet'
-import type { Driver, Trip, Vehicle } from '@/types'
+import type { Client, Driver, Trip, Vehicle } from '@/types'
 
 // Paleta de colores: claves usadas como valor en BD + hex usado para CSS/SVG.
 const PIN_COLORS: { key: string; hex: string; label: string }[] = [
@@ -137,6 +138,7 @@ export default function TripPlannerPage() {
   // Datos de la app
   const { data: drivers = [] } = useList<Driver>('drivers', '/drivers', 200, true)
   const { data: vehicles = [] } = useList<Vehicle>('vehicles', '/vehicles', 200, true)
+  const { data: clients = [] } = useList<Client>('clients', '/clients', 200, true)
 
   // Pool
   const { data: pool = [] } = useQuery({
@@ -336,6 +338,15 @@ export default function TripPlannerPage() {
       qc.invalidateQueries({ queryKey: ['all-trip-planned-stops'] })
     },
   })
+
+  const createClientMutation = useMutation({
+    mutationFn: (name: string) => api.post<Client>('/clients', { name }).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['clients', 'all'] }),
+  })
+
+  async function handleCreateClient(name: string): Promise<Client> {
+    return await createClientMutation.mutateAsync(name)
+  }
 
   const updateTripMutation = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Partial<Trip> }) =>
@@ -742,6 +753,8 @@ export default function TripPlannerPage() {
                       route={tripRoutes[t.id] ?? null}
                       drivers={drivers}
                       vehicles={vehicles}
+                      clients={clients}
+                      onCreateClient={handleCreateClient}
                       otherDrafts={drafts.filter(d => d.id !== t.id)}
                       expanded={expandedTripIds.has(t.id)}
                       hoveredStopId={hoveredStopId}
@@ -874,13 +887,15 @@ function PoolItem({
 }
 
 function DraftTripCard({
-  trip, stops, route, drivers, vehicles, otherDrafts, expanded, hoveredStopId, onStopHover, onToggle, onUpdate, onDelete, onConfirm, onReturnStop, onReorder, onMoveStop, onUpdateStop, onPromoteToOrigin, onDemoteOrigin, addMode, onToggleAddMode, confirming,
+  trip, stops, route, drivers, vehicles, clients, onCreateClient, otherDrafts, expanded, hoveredStopId, onStopHover, onToggle, onUpdate, onDelete, onConfirm, onReturnStop, onReorder, onMoveStop, onUpdateStop, onPromoteToOrigin, onDemoteOrigin, addMode, onToggleAddMode, confirming,
 }: {
   trip: DraftTrip
   stops: PlannedStop[]
   route: RouteGeometry | null
   drivers: Driver[]
   vehicles: Vehicle[]
+  clients: Client[]
+  onCreateClient: (name: string) => Promise<Client>
   otherDrafts: DraftTrip[]
   expanded: boolean
   hoveredStopId: string | null
@@ -1030,6 +1045,14 @@ function DraftTripCard({
                 {vehicles.map(v => <option key={v.id} value={v.id}>{v.plate}</option>)}
               </select>
             </div>
+            <ClientCombobox
+              clients={clients}
+              selectedClientId={trip.client_id}
+              onSelect={(c) => onUpdate({ client_id: c.id })}
+              onClear={() => onUpdate({ client_id: null })}
+              onCreate={onCreateClient}
+              placeholder="Cliente (opcional)"
+            />
           </div>
 
           {/* Inicio del viaje: cuando hay origen, mostramos una mini-tarjeta
