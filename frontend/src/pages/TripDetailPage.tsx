@@ -142,6 +142,16 @@ export default function TripDetailPage() {
     },
   })
 
+  const backToDraftMutation = useMutation({
+    mutationFn: () => api.post<Trip>(`/trips/${id}/back-to-draft`).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trips'] })
+      qc.invalidateQueries({ queryKey: ['trips', 'drafts'] })
+      qc.invalidateQueries({ queryKey: ['trips', 'pending'] })
+      navigate('/trips/plan')
+    },
+  })
+
   const vehicle = vehicles?.find(v => v.id === trip?.vehicle_id)
   const driver = drivers?.find(d => d.id === trip?.driver_id)
 
@@ -443,6 +453,22 @@ export default function TripDetailPage() {
                 <Edit2 size={15} />
                 Editar viaje
               </button>
+              {(trip.status === 'pendiente' || trip.status === 'planificado') && (
+                <button
+                  onClick={() => {
+                    if (window.confirm('¿Devolver el viaje a borrador? Vas a poder editarlo desde el despachador. El chofer dejará de verlo hasta que lo vuelvas a confirmar.')) {
+                      backToDraftMutation.mutate()
+                    }
+                  }}
+                  disabled={backToDraftMutation.isPending}
+                  className="w-full flex items-center justify-center gap-2 border border-amber-200 hover:bg-amber-50 text-amber-700 font-medium py-3 rounded-xl transition-colors text-sm disabled:opacity-50"
+                >
+                  {backToDraftMutation.isPending
+                    ? <Loader2 size={15} className="animate-spin" />
+                    : <Edit2 size={15} />}
+                  Volver a borrador
+                </button>
+              )}
               <button
                 onClick={() => setCancelConfirm(true)}
                 className="w-full flex items-center justify-center gap-2 border border-red-200 hover:bg-red-50 text-red-600 font-medium py-3 rounded-xl transition-colors text-sm"

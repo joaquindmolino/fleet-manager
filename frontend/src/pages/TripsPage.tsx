@@ -134,6 +134,16 @@ export default function TripsPage() {
     startMutation.mutate(t.id)
   }
 
+  const backToDraftMutation = useMutation({
+    mutationFn: (tripId: string) => api.post(`/trips/${tripId}/back-to-draft`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trips'] })
+      qc.invalidateQueries({ queryKey: ['trips', 'drafts'] })
+      qc.invalidateQueries({ queryKey: ['trips', 'pending'] })
+      navigate('/trips/plan')
+    },
+  })
+
   const cancelMutation = useMutation({
     mutationFn: (tripId: string) => api.patch(`/trips/${tripId}`, { status: 'cancelado' }),
     onSuccess: () => {
@@ -451,6 +461,15 @@ export default function TripsPage() {
                           )}
                           {t.status === 'en_curso' && canCerrar && (
                             <button onClick={() => setCompleteModal({ trip: t, end_odometer: '' })} className="text-xs text-green-600 hover:text-green-800 font-medium">Finalizar</button>
+                          )}
+                          {['planificado', 'pendiente'].includes(t.status) && canEditar && (
+                            <button
+                              onClick={() => { if (window.confirm('¿Devolver el viaje a borrador? Vas a poder editarlo desde el despachador. El chofer dejará de verlo hasta que lo vuelvas a confirmar.')) backToDraftMutation.mutate(t.id) }}
+                              disabled={backToDraftMutation.isPending}
+                              className="text-xs text-amber-600 hover:text-amber-800 font-medium disabled:opacity-50"
+                            >
+                              A borrador
+                            </button>
                           )}
                           {['planificado', 'pendiente', 'en_curso'].includes(t.status) && canEditar && (
                             <button

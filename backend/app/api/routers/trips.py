@@ -817,6 +817,35 @@ async def promote_stop_to_origin(
     return trip
 
 
+@router.post("/{trip_id}/back-to-draft", response_model=TripResponse, dependencies=[_can_editar])
+async def send_trip_back_to_draft(
+    trip_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> Trip:
+    """Devuelve un viaje al estado borrador para que el coordinador lo siga editando.
+
+    Solo permitido para viajes en pendiente o planificado. No se puede revertir
+    un viaje que ya arrancó (en_curso), está completado o cancelado.
+    """
+    trip = (await db.execute(
+        select(Trip).where(Trip.id == trip_id, Trip.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado.")
+    if trip.status not in (EstadoViaje.PENDIENTE.value, EstadoViaje.PLANIFICADO.value):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Solo se pueden devolver a borrador viajes pendientes o planificados.",
+        )
+    trip.status = EstadoViaje.BORRADOR.value
+    # Limpio start_time por si quedó seteado al confirmarse (no debería, pero defensivo).
+    trip.start_time = None
+    await db.flush()
+    await db.refresh(trip)
+    return trip
+
+
 @router.get("/export.xlsx", dependencies=[_can_ver])
 async def export_trips_xlsx(
     current_user: CurrentUser,
