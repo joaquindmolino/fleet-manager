@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
-import { Plus, Route, Play, Loader2, ChevronRight, Navigation, Map as MapIcon, FileText, Link as LinkIcon } from 'lucide-react'
+import { Plus, Route, Play, Loader2, ChevronRight, Navigation, Map as MapIcon, FileText, Link as LinkIcon, Search } from 'lucide-react'
 import { api } from '@/lib/api'
 import { captureLocation } from '@/lib/geolocation'
 import { downloadRouteSheet, copyPublicRouteSheetUrl } from '@/lib/downloads'
@@ -53,12 +53,41 @@ export default function TripsPage() {
   const [startingId, setStartingId] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   // Solapas + filtros del historial.
+  // Hay dos pares de estado:
+  //  - draft*: los selects/inputs se atan acá; no dispara fetch.
+  //  - applied*: los que arma la query; se actualizan al tocar "Buscar".
   const [view, setView] = useState<'active' | 'history'>('active')
-  const [historyStatus, setHistoryStatus] = useState<string>('')  // '' = todos
-  const [historyDriverId, setHistoryDriverId] = useState<string>('')  // '' = todos
+  const [draftStatus, setDraftStatus] = useState<string>('')
+  const [draftDriverId, setDraftDriverId] = useState<string>('')
+  const [draftDateFrom, setDraftDateFrom] = useState<string>('')
+  const [draftDateTo, setDraftDateTo] = useState<string>('')
+  const [historyStatus, setHistoryStatus] = useState<string>('')
+  const [historyDriverId, setHistoryDriverId] = useState<string>('')
   const [historyDateFrom, setHistoryDateFrom] = useState<string>('')
   const [historyDateTo, setHistoryDateTo] = useState<string>('')
   const [exporting, setExporting] = useState(false)
+
+  const filtersDirty =
+    draftStatus !== historyStatus ||
+    draftDriverId !== historyDriverId ||
+    draftDateFrom !== historyDateFrom ||
+    draftDateTo !== historyDateTo
+  const anyFilterApplied = !!(historyStatus || historyDriverId || historyDateFrom || historyDateTo)
+  const anyFilterDraft = !!(draftStatus || draftDriverId || draftDateFrom || draftDateTo)
+
+  function applyFilters() {
+    setHistoryStatus(draftStatus)
+    setHistoryDriverId(draftDriverId)
+    setHistoryDateFrom(draftDateFrom)
+    setHistoryDateTo(draftDateTo)
+    setPage(1)
+  }
+
+  function clearFilters() {
+    setDraftStatus(''); setDraftDriverId(''); setDraftDateFrom(''); setDraftDateTo('')
+    setHistoryStatus(''); setHistoryDriverId(''); setHistoryDateFrom(''); setHistoryDateTo('')
+    setPage(1)
+  }
 
   function buildQueryString(): string {
     const params: string[] = [`page=${page}`, `size=20`]
@@ -261,14 +290,15 @@ export default function TripsPage() {
         </button>
       </div>
 
-      {/* Barra de filtros: solo en Historial */}
+      {/* Barra de filtros: solo en Historial. Los selects atan a draft*;
+          la query se actualiza recién al tocar "Buscar". */}
       {view === 'history' && (
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 mb-4 flex flex-wrap items-end gap-3">
           <div className="min-w-[160px]">
             <label className="block text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-1">Estado</label>
             <select
-              value={historyStatus}
-              onChange={e => { setHistoryStatus(e.target.value); setPage(1) }}
+              value={draftStatus}
+              onChange={e => setDraftStatus(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white"
             >
               <option value="">Todos</option>
@@ -283,8 +313,8 @@ export default function TripsPage() {
           <div className="min-w-[180px]">
             <label className="block text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-1">Conductor</label>
             <select
-              value={historyDriverId}
-              onChange={e => { setHistoryDriverId(e.target.value); setPage(1) }}
+              value={draftDriverId}
+              onChange={e => setDraftDriverId(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white"
             >
               <option value="">Todos</option>
@@ -297,8 +327,9 @@ export default function TripsPage() {
             <label className="block text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-1">Desde</label>
             <input
               type="date"
-              value={historyDateFrom}
-              onChange={e => { setHistoryDateFrom(e.target.value); setPage(1) }}
+              value={draftDateFrom}
+              onChange={e => setDraftDateFrom(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') applyFilters() }}
               className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
             />
           </div>
@@ -306,20 +337,23 @@ export default function TripsPage() {
             <label className="block text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-1">Hasta</label>
             <input
               type="date"
-              value={historyDateTo}
-              onChange={e => { setHistoryDateTo(e.target.value); setPage(1) }}
+              value={draftDateTo}
+              onChange={e => setDraftDateTo(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') applyFilters() }}
               className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
             />
           </div>
-          {(historyStatus || historyDriverId || historyDateFrom || historyDateTo) && (
+          <button
+            onClick={applyFilters}
+            disabled={!filtersDirty && anyFilterApplied}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium px-4 py-2 rounded-lg"
+            title={filtersDirty ? 'Aplicar filtros' : 'No hay cambios para aplicar'}
+          >
+            <Search size={13} /> Buscar
+          </button>
+          {(anyFilterApplied || anyFilterDraft) && (
             <button
-              onClick={() => {
-                setHistoryStatus('')
-                setHistoryDriverId('')
-                setHistoryDateFrom('')
-                setHistoryDateTo('')
-                setPage(1)
-              }}
+              onClick={clearFilters}
               className="text-xs text-gray-500 hover:text-gray-800 underline py-1.5"
             >
               Limpiar filtros
