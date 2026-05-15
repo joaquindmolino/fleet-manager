@@ -54,21 +54,25 @@ export default function TripsPage() {
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   // Solapas + filtros del historial.
   const [view, setView] = useState<'active' | 'history'>('active')
-  const [historyStatuses, setHistoryStatuses] = useState<string[]>([])  // [] = todos
+  const [historyStatus, setHistoryStatus] = useState<string>('')  // '' = todos
+  const [historyDriverId, setHistoryDriverId] = useState<string>('')  // '' = todos
   const [historyDateFrom, setHistoryDateFrom] = useState<string>('')
   const [historyDateTo, setHistoryDateTo] = useState<string>('')
   const [exporting, setExporting] = useState(false)
 
-  function buildQueryString(includeStatusFilter: boolean): string {
+  function buildQueryString(): string {
     const params: string[] = [`page=${page}`, `size=20`]
-    if (view === 'history') {
-      if (includeStatusFilter && historyStatuses.length > 0) {
-        params.push(`status=${historyStatuses.join(',')}`)
-      } else if (includeStatusFilter && historyStatuses.length === 0) {
-        // Pedimos explícitamente todos los estados para que el server no aplique
-        // el default de "solo activos" cuando el caller es un chofer.
+    if (view === 'active') {
+      // Activos: solo pendiente, en curso o borrador (los que tienen sentido editar/seguir).
+      params.push('status=pendiente,en_curso,borrador')
+    } else {
+      // Historial: por defecto todos los estados; si el usuario eligió uno, se respeta.
+      if (historyStatus) {
+        params.push(`status=${historyStatus}`)
+      } else {
         params.push('status=borrador,pendiente,planificado,en_curso,completado,cancelado')
       }
+      if (historyDriverId) params.push(`driver_id=${historyDriverId}`)
       if (historyDateFrom) params.push(`date_from=${historyDateFrom}T00:00:00`)
       if (historyDateTo) params.push(`date_to=${historyDateTo}T23:59:59`)
     }
@@ -76,8 +80,8 @@ export default function TripsPage() {
   }
 
   const { data, isLoading } = useQuery({
-    queryKey: ['trips', page, view, historyStatuses.join(','), historyDateFrom, historyDateTo],
-    queryFn: () => api.get<PaginatedResponse<Trip>>(`/trips?${buildQueryString(true)}`).then(r => r.data),
+    queryKey: ['trips', page, view, historyStatus, historyDriverId, historyDateFrom, historyDateTo],
+    queryFn: () => api.get<PaginatedResponse<Trip>>(`/trips?${buildQueryString()}`).then(r => r.data),
   })
 
   const { data: vehicles } = useList<Vehicle>('vehicles', '/vehicles', 100, canSeeVehicles)
@@ -206,7 +210,7 @@ export default function TripsPage() {
   async function handleExportXlsx() {
     setExporting(true)
     try {
-      const resp = await api.get<Blob>(`/trips/export.xlsx?${buildQueryString(true)}`, { responseType: 'blob' })
+      const resp = await api.get<Blob>(`/trips/export.xlsx?${buildQueryString()}`, { responseType: 'blob' })
       const url = URL.createObjectURL(resp.data)
       const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
       const link = document.createElement('a')
@@ -260,26 +264,34 @@ export default function TripsPage() {
       {/* Barra de filtros: solo en Historial */}
       {view === 'history' && (
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 mb-4 flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[180px]">
+          <div className="min-w-[160px]">
             <label className="block text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-1">Estado</label>
             <select
-              multiple
-              value={historyStatuses}
-              onChange={e => {
-                const opts = Array.from(e.target.selectedOptions).map(o => o.value)
-                setHistoryStatuses(opts)
-                setPage(1)
-              }}
-              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs h-24"
+              value={historyStatus}
+              onChange={e => { setHistoryStatus(e.target.value); setPage(1) }}
+              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white"
             >
-              <option value="completado">Completado</option>
-              <option value="cancelado">Cancelado</option>
-              <option value="en_curso">En curso</option>
+              <option value="">Todos</option>
+              <option value="borrador">Borrador</option>
               <option value="pendiente">Pendiente</option>
               <option value="planificado">Planificado</option>
-              <option value="borrador">Borrador</option>
+              <option value="en_curso">En curso</option>
+              <option value="completado">Completado</option>
+              <option value="cancelado">Cancelado</option>
             </select>
-            <p className="text-[10px] text-gray-400 mt-0.5">Ctrl+click para varios. Vacío = todos</p>
+          </div>
+          <div className="min-w-[180px]">
+            <label className="block text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-1">Conductor</label>
+            <select
+              value={historyDriverId}
+              onChange={e => { setHistoryDriverId(e.target.value); setPage(1) }}
+              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+            >
+              <option value="">Todos</option>
+              {(drivers ?? []).map(d => (
+                <option key={d.id} value={d.id}>{d.full_name}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-1">Desde</label>
@@ -299,9 +311,15 @@ export default function TripsPage() {
               className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
             />
           </div>
-          {(historyStatuses.length > 0 || historyDateFrom || historyDateTo) && (
+          {(historyStatus || historyDriverId || historyDateFrom || historyDateTo) && (
             <button
-              onClick={() => { setHistoryStatuses([]); setHistoryDateFrom(''); setHistoryDateTo(''); setPage(1) }}
+              onClick={() => {
+                setHistoryStatus('')
+                setHistoryDriverId('')
+                setHistoryDateFrom('')
+                setHistoryDateTo('')
+                setPage(1)
+              }}
               className="text-xs text-gray-500 hover:text-gray-800 underline py-1.5"
             >
               Limpiar filtros
