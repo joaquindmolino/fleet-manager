@@ -301,6 +301,102 @@ async def create_trip(body: TripCreate, current_user: CurrentUser, db: DbSession
     return trip
 
 
+@router.get("/export.xlsx", dependencies=[_can_ver])
+async def export_trips_xlsx(
+    current_user: CurrentUser,
+    db: DbSession,
+    vehicle_id: uuid.UUID | None = None,
+    driver_id: uuid.UUID | None = None,
+    status: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> Response:
+    """Exporta a Excel los viajes que matchean los filtros (mismos que /trips).
+
+    IMPORTANTE: este endpoint debe declararse antes que cualquier ruta con
+    {trip_id} porque FastAPI matchea por orden de registro y "export.xlsx"
+    no parsea como UUID (resultaría en 422).
+    """
+    statuses = [s.strip() for s in status.split(",") if s.strip()] if status else None
+    query, _ = await _build_trips_query(
+        current_user, db,
+        statuses=statuses, date_from=date_from, date_to=date_to,
+        vehicle_id=vehicle_id, driver_id=driver_id,
+    )
+    trips = (await db.execute(
+        query.order_by(Trip.created_at.desc()).limit(5000)
+    )).scalars().all()
+
+    # Pre-cargar maps de driver / vehicle / client / planned_stops_count
+    tenant_id = current_user.tenant_id
+    drivers = {
+        d.id: d for d in (await db.execute(
+            select(Driver).where(Driver.tenant_id == tenant_id)
+        )).scalars().all()
+    }
+    vehicles = {
+        v.id: v for v in (await db.execute(
+            select(Vehicle).where(Vehicle.tenant_id == tenant_id)
+        )).scalars().all()
+    }
+    clients = {
+        c.id: c for c in (await db.execute(
+            select(Client).where(Client.tenant_id == tenant_id)
+        )).scalars().all()
+    }
+    trip_ids = [t.id for t in trips]
+    stops_counts: dict[uuid.UUID, int] = {}
+    if trip_ids:
+        rows = (await db.execute(
+            select(TripPlannedStop.trip_id, func.count(TripPlannedStop.id))
+            .where(TripPlannedStop.trip_id.in_(trip_ids))
+            .group_by(TripPlannedStop.trip_id)
+        )).all()
+        stops_counts = {row[0]: row[1] for row in rows}
+
+    status_label = {
+        "borrador": "Borrador", "pendiente": "Pendiente", "planificado": "Planificado",
+        "en_curso": "En curso", "completado": "Completado", "cancelado": "Cancelado",
+    }
+
+    rows_data = []
+    for t in trips:
+        d = drivers.get(t.driver_id) if t.driver_id else None
+        v = vehicles.get(t.vehicle_id)
+        c = clients.get(t.client_id) if t.client_id else None
+        planned_count = stops_counts.get(t.id, 0)
+        km_recorridos = None
+        if t.start_odometer is not None and t.end_odometer is not None:
+            km_recorridos = t.end_odometer - t.start_odometer
+        rows_data.append({
+            "Nombre del viaje": t.name or "",
+            "Documento asociado": t.associated_document or "",
+            "Cliente": c.name if c else "",
+            "Conductor": d.full_name if d else "",
+            "Vehículo": v.plate if v else "",
+            "Estado": status_label.get(t.status, t.status),
+            "Fecha de creación": t.created_at,
+            "Fecha programada": t.scheduled_date,
+            "Inicio real": t.start_time,
+            "Fin real": t.end_time,
+            "Origen": t.origin or "",
+            "Destino": t.destination or "",
+            "Paradas": planned_count if planned_count > 0 else (t.stops_count or ""),
+            "Km inicial": t.start_odometer,
+            "Km final": t.end_odometer,
+            "Km recorridos": km_recorridos,
+            "Observaciones": t.notes or "",
+        })
+
+    xlsx_bytes = build_trips_xlsx(rows_data)
+    today = datetime.now().strftime("%Y%m%d")
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="viajes-{today}.xlsx"'},
+    )
+
+
 @router.get("/{trip_id}", response_model=TripResponse, dependencies=[_can_ver])
 async def get_trip(trip_id: uuid.UUID, current_user: CurrentUser, db: DbSession) -> Trip:
     query = select(Trip).where(Trip.id == trip_id, Trip.tenant_id == current_user.tenant_id)
@@ -844,97 +940,6 @@ async def send_trip_back_to_draft(
     await db.flush()
     await db.refresh(trip)
     return trip
-
-
-@router.get("/export.xlsx", dependencies=[_can_ver])
-async def export_trips_xlsx(
-    current_user: CurrentUser,
-    db: DbSession,
-    vehicle_id: uuid.UUID | None = None,
-    driver_id: uuid.UUID | None = None,
-    status: str | None = None,
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
-) -> Response:
-    """Exporta a Excel los viajes que matchean los filtros (mismos que /trips)."""
-    statuses = [s.strip() for s in status.split(",") if s.strip()] if status else None
-    query, _ = await _build_trips_query(
-        current_user, db,
-        statuses=statuses, date_from=date_from, date_to=date_to,
-        vehicle_id=vehicle_id, driver_id=driver_id,
-    )
-    trips = (await db.execute(
-        query.order_by(Trip.created_at.desc()).limit(5000)
-    )).scalars().all()
-
-    # Pre-cargar maps de driver / vehicle / client / planned_stops_count
-    tenant_id = current_user.tenant_id
-    drivers = {
-        d.id: d for d in (await db.execute(
-            select(Driver).where(Driver.tenant_id == tenant_id)
-        )).scalars().all()
-    }
-    vehicles = {
-        v.id: v for v in (await db.execute(
-            select(Vehicle).where(Vehicle.tenant_id == tenant_id)
-        )).scalars().all()
-    }
-    clients = {
-        c.id: c for c in (await db.execute(
-            select(Client).where(Client.tenant_id == tenant_id)
-        )).scalars().all()
-    }
-    trip_ids = [t.id for t in trips]
-    stops_counts: dict[uuid.UUID, int] = {}
-    if trip_ids:
-        rows = (await db.execute(
-            select(TripPlannedStop.trip_id, func.count(TripPlannedStop.id))
-            .where(TripPlannedStop.trip_id.in_(trip_ids))
-            .group_by(TripPlannedStop.trip_id)
-        )).all()
-        stops_counts = {row[0]: row[1] for row in rows}
-
-    status_label = {
-        "borrador": "Borrador", "pendiente": "Pendiente", "planificado": "Planificado",
-        "en_curso": "En curso", "completado": "Completado", "cancelado": "Cancelado",
-    }
-
-    rows_data = []
-    for t in trips:
-        d = drivers.get(t.driver_id) if t.driver_id else None
-        v = vehicles.get(t.vehicle_id)
-        c = clients.get(t.client_id) if t.client_id else None
-        planned_count = stops_counts.get(t.id, 0)
-        km_recorridos = None
-        if t.start_odometer is not None and t.end_odometer is not None:
-            km_recorridos = t.end_odometer - t.start_odometer
-        rows_data.append({
-            "Nombre del viaje": t.name or "",
-            "Documento asociado": t.associated_document or "",
-            "Cliente": c.name if c else "",
-            "Conductor": d.full_name if d else "",
-            "Vehículo": v.plate if v else "",
-            "Estado": status_label.get(t.status, t.status),
-            "Fecha de creación": t.created_at,
-            "Fecha programada": t.scheduled_date,
-            "Inicio real": t.start_time,
-            "Fin real": t.end_time,
-            "Origen": t.origin or "",
-            "Destino": t.destination or "",
-            "Paradas": planned_count if planned_count > 0 else (t.stops_count or ""),
-            "Km inicial": t.start_odometer,
-            "Km final": t.end_odometer,
-            "Km recorridos": km_recorridos,
-            "Observaciones": t.notes or "",
-        })
-
-    xlsx_bytes = build_trips_xlsx(rows_data)
-    today = datetime.now().strftime("%Y%m%d")
-    return Response(
-        content=xlsx_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="viajes-{today}.xlsx"'},
-    )
 
 
 @router.get(
